@@ -18,6 +18,14 @@ typedef uint64_t uint64;
 
 #define id char
 
+void
+PrintDebugString(int32 i)
+{
+    char buffer[256];
+    sprintf_s(buffer, sizeof(buffer), "%d\n", i);
+    OutputDebugStringA(buffer);
+}
+
 void *
 Win32GetAifPointer(LPCWSTR Filename)
 {
@@ -90,43 +98,31 @@ int WinMain(HINSTANCE Instance,
     LPCWSTR Filename = L"SC88PR~1.aif";
     uint8 *StarAif = (uint8 *)Win32GetAifPointer(Filename);
 
-    char *StarAifFormChunkID = (char *)StarAif;
+    form_chunk FormChunk;
 
-    form_chunk FormChunk = {};
-    
-    int32 Byte = 0;
     for(int i = 0; i < ID_WIDTH; i++)
     {
-	FormChunk.ID[Byte] = *StarAifFormChunkID;
-	StarAifFormChunkID++;
-	++Byte;
+	unsigned char *Byte = (unsigned char  *)(StarAif + i);
+	FormChunk.ID[i] = *Byte;
     }
-    FormChunk.ID[Byte] = '\0';
+    FormChunk.ID[ID_WIDTH] = '\0';
 
-    FormChunk.DataSize = (int32)*(StarAif+Byte);
+    int32 *BEDataSize = (int32 *)(StarAif+ID_WIDTH);
 
-#if 0
-    uint8 BigEndianBytes[4];
+    uint8 BE_LeastSignificant = *BEDataSize & 255;
+    uint8 BE_SecondByte = (*BEDataSize >> 8) & 255;
+    uint8 BE_ThirdByte = (*BEDataSize >> 16) & 255;
+    uint8 BE_MostSignificant = (*BEDataSize >> 24) & 255;
 
-    for(int i = 0; i < sizeof(int32); i++)
-    {
-	BigEndianBytes[i] = (uint8)*(StarAif + Byte);
-	++Byte;
-    }
+    FormChunk.DataSize = (int32)(((uint32) BE_LeastSignificant << 24) | ((uint32) BE_SecondByte << 16) | ((uint32) BE_ThirdByte << 8) | ((uint32) BE_MostSignificant));
 
-    uint8 LeastSignificantLittleEndianByte = BigEndianBytes[3];
-    uint8 ThirdMostSignificantLittleEndianByte = BigEndianBytes[2];
-    uint8 SecondMostSignificantLittleEndianByte = BigEndianBytes[1];
-    uint8 MostSignificantLittleEndianByte = BigEndianBytes[0];
 
-    FormChunk.DataSize = (int32)(LeastSignificantLittleEndianByte << 24 |\
-				    ThirdMostSignificantLittleEndianByte << 16 |\
-				    SecondMostSignificantLittleEndianByte << 8 |\
-				    MostSignificantLittleEndianByte); 
 
-    int32 Dummy = 848128;
-#endif
+
 
     
+
+
+
     return(0);
 }
