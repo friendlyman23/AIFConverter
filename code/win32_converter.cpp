@@ -16,8 +16,6 @@ typedef uint64_t uint64;
 
 #define ID_WIDTH 4
 
-#define id char
-
 void
 PrintDebugString(int32 i)
 {
@@ -81,13 +79,65 @@ Win32GetAifPointer(LPCWSTR Filename)
     return(StarAif);
 }
 
-struct form_chunk
+struct chunk_struct
 {
+
+    uint8 *Address;
     char ID[ID_WIDTH + 1];
     int32 DataSize;
     char Type[ID_WIDTH + 1];
-    void *Data;
+    uint8 *Data;
 };
+
+void
+ReadChunkAddress(uint8 *ChunkStart, chunk_struct *ChunkStruct)
+{
+    ChunkStruct->Address = ChunkStart;
+}
+
+void
+ReadChunkID(uint8 *ChunkStart, chunk_struct *ChunkStruct)
+{
+    for(int i = 0; i < ID_WIDTH; i++)
+    {
+	uint8 *Letter = (uint8 *)(ChunkStart + i);
+	ChunkStruct->ID[i] = *Letter;
+    }
+
+    ChunkStruct->ID[ID_WIDTH] = '\0';
+}
+
+
+int32
+FlipEndianness(int32 IntToFlip)
+{
+    int32 IntToWrite;
+
+    uint8 IntToFlipByteZero = IntToFlip & 255;
+    uint8 IntToFlipByteOne = (IntToFlip >> 8) & 255;
+    uint8 IntToFlipByteTwo = (IntToFlip >> 16) & 255;
+    uint8 IntToFlipByteThree = (IntToFlip >> 24) & 255;
+
+    uint32 IntToWriteByteThree = (uint32) IntToFlipByteZero << 24;
+    uint32 IntToWriteByteTwo = (uint32) IntToFlipByteOne << 16;
+    uint32 IntToWriteByteOne = (uint32) IntToFlipByteTwo << 8;
+    uint32 IntToWriteByteZero = (uint32) IntToFlipByteThree;
+
+    IntToWrite = (int32) (IntToWriteByteThree | 
+			       IntToWriteByteTwo |
+			       IntToWriteByteOne |
+			       IntToWriteByteZero);
+
+    return(IntToWrite);
+
+    /*uint8 BE_LeastSignificant = *BEDataSize & 255;*/
+    /*uint8 BE_SecondByte = (*BEDataSize >> 8) & 255;*/
+    /*uint8 BE_ThirdByte = (*BEDataSize >> 16) & 255;*/
+    /*uint8 BE_MostSignificant = (*BEDataSize >> 24) & 255;*/
+    /**/
+    /*FormChunk.DataSize = (int32)(((uint32) BE_LeastSignificant << 24) | ((uint32) BE_SecondByte << 16) | ((uint32) BE_ThirdByte << 8) | ((uint32) BE_MostSignificant));*/
+
+}
 
 
 int WinMain(HINSTANCE Instance, 
@@ -98,23 +148,18 @@ int WinMain(HINSTANCE Instance,
     LPCWSTR Filename = L"SC88PR~1.aif";
     uint8 *StarAif = (uint8 *)Win32GetAifPointer(Filename);
 
-    form_chunk FormChunk;
+    chunk_struct FormChunk = {};
 
-    for(int i = 0; i < ID_WIDTH; i++)
-    {
-	unsigned char *Byte = (unsigned char  *)(StarAif + i);
-	FormChunk.ID[i] = *Byte;
-    }
-    FormChunk.ID[ID_WIDTH] = '\0';
+    ReadChunkAddress(StarAif, &FormChunk);
+
+    ReadChunkID(StarAif, &FormChunk);
 
     int32 *BEDataSize = (int32 *)(StarAif+ID_WIDTH);
 
-    uint8 BE_LeastSignificant = *BEDataSize & 255;
-    uint8 BE_SecondByte = (*BEDataSize >> 8) & 255;
-    uint8 BE_ThirdByte = (*BEDataSize >> 16) & 255;
-    uint8 BE_MostSignificant = (*BEDataSize >> 24) & 255;
+    FormChunk.DataSize = FlipEndianness(*BEDataSize);
 
-    FormChunk.DataSize = (int32)(((uint32) BE_LeastSignificant << 24) | ((uint32) BE_SecondByte << 16) | ((uint32) BE_ThirdByte << 8) | ((uint32) BE_MostSignificant));
+
+
 
 
 
