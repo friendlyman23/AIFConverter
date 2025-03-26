@@ -25,16 +25,15 @@ PrintDebugString(int32 i)
 }
 
 void *
-Win32GetAifPointer(LPCWSTR Filename)
+Win32GetFilePointer(LPCWSTR Filename)
 {
-    LPVOID StarAif = 0;
-    HANDLE AifHandle = CreateFileW(Filename, GENERIC_READ | GENERIC_WRITE, 
-				    0, 0, OPEN_EXISTING, 
-				    FILE_ATTRIBUTE_NORMAL, 0);
-    if(AifHandle != INVALID_HANDLE_VALUE)
+    LPVOID FileAddress = 0;
+    HANDLE FileHandle = CreateFileW(Filename, GENERIC_READ, FILE_SHARE_READ, 0, 
+				    OPEN_EXISTING, 0, 0);
+    if(FileHandle != INVALID_HANDLE_VALUE)
     {
 	LARGE_INTEGER FileSize;
-	GetFileSizeEx(AifHandle, &FileSize);
+	GetFileSizeEx(FileHandle, &FileSize);
 	if(FileSize.QuadPart)
 	{
 	    Assert(FileSize.QuadPart <= 0xFFFFFFFF);
@@ -42,18 +41,18 @@ Win32GetAifPointer(LPCWSTR Filename)
 	    HANDLE HeapHandle = GetProcessHeap();
 	    if(HeapHandle)
 	    {
-		StarAif = HeapAlloc(HeapHandle, HEAP_ZERO_MEMORY, FileSize.QuadPart);
-		if(StarAif)
+		FileAddress = HeapAlloc(HeapHandle, HEAP_ZERO_MEMORY, FileSize.QuadPart);
+		if(FileAddress)
 		{
 		    DWORD NumBytesRead;
 		    BOOL FileReadSuccessfully = false;
-		    FileReadSuccessfully = ReadFile(AifHandle, StarAif, FileSize.QuadPart, &NumBytesRead, 0);
+		    FileReadSuccessfully = ReadFile(FileHandle, FileAddress, FileSize.QuadPart, &NumBytesRead, 0);
 		    if(!FileReadSuccessfully)
 		    {
 			OutputDebugStringA("failed to read file\n");
 
 			//free if we failed to read the file
-			HeapFree(HeapHandle, 0, StarAif);
+			HeapFree(HeapHandle, 0, FileAddress);
 		    }
 		}
 		else
@@ -76,39 +75,56 @@ Win32GetAifPointer(LPCWSTR Filename)
 	OutputDebugStringA("failed to get .aif file handle\n");
     }
 
-    return(StarAif);
+    return(FileAddress);
 }
 
 struct chunk_struct
 {
-
-    uint8 *Address;
+    uint64_t Address;
     char ID[ID_WIDTH + 1];
     int32 DataSize;
     char Type[ID_WIDTH + 1];
-    uint8 *Data;
+    uint8 *DataStart;
 };
 
 void
-ReadChunkAddress(uint8 *ChunkStart, chunk_struct *ChunkStruct)
+ReadChunkAddress(uint64_t ChunkAddress, chunk_struct *ChunkStruct)
 {
-    ChunkStruct->Address = ChunkStart;
+    ChunkStruct->Address = ChunkAddress;
 }
 
 void
-ReadChunkID(uint8 *ChunkStart, chunk_struct *ChunkStruct)
+ReadChunkID(uint8 *ChunkIDStart, chunk_struct *ChunkStruct)
 {
     for(int i = 0; i < ID_WIDTH; i++)
     {
-	uint8 *Letter = (uint8 *)(ChunkStart + i);
+	uint8 *Letter = (uint8 *)(ChunkIDStart + i);
 	ChunkStruct->ID[i] = *Letter;
     }
 
     ChunkStruct->ID[ID_WIDTH] = '\0';
 }
 
+void
+ReadChunkType(uint8 *ChunkTypeStart, chunk_struct *ChunkStruct)
+{    
+    for(int i = 0; i < ID_WIDTH; i++)
+    {
+	uint8 *Letter = (uint8 *)(ChunkTypeStart + i);
+	ChunkStruct->Type[i] = *Letter;
+    }
 
-int32
+    ChunkStruct->Type[ID_WIDTH] = '\0';
+}
+
+void
+ReadChunkDataStart(uint8 *ChunkDataStart, chunk_struct *ChunkStruct)
+{
+    ChunkStruct->DataStart = ChunkDataStart;
+}
+
+
+inline int32 
 FlipEndianness(int32 IntToFlip)
 {
     int32 IntToWrite;
@@ -145,18 +161,29 @@ int WinMain(HINSTANCE Instance,
 	PSTR CmdLine, 
 	int CmdShow)
 {
-    LPCWSTR Filename = L"SC88PR~1.aif";
-    uint8 *StarAif = (uint8 *)Win32GetAifPointer(Filename);
-
+    LPCWSTR Filename = L"SC88PR~1.AIF";
+    uint8 *FileAddress = (uint8 *)Win32GetFilePointer(Filename);
     chunk_struct FormChunk = {};
 
-    ReadChunkAddress(StarAif, &FormChunk);
+    uint64_t FormChunkAddress = (uint64_t)FileAddress;
+    ReadChunkAddress(FormChunkAddress, &FormChunk);
 
-    ReadChunkID(StarAif, &FormChunk);
+    uint8 *FormChunkIDStart = FileAddress;
+    ReadChunkID(FormChunkIDStart, &FormChunk);
 
-    int32 *BEDataSize = (int32 *)(StarAif+ID_WIDTH);
+    int32 *FormChunkDataSizeAddress = (int32 *)(FileAddress+ID_WIDTH);
+    FormChunk.DataSize = FlipEndianness(*FormChunkDataSizeAddress);
 
-    FormChunk.DataSize = FlipEndianness(*BEDataSize);
+    uint8 *FormChunkTypeStart = (FileAddress + ID_WIDTH + 
+				    sizeof(FormChunk.DataSize));
+    ReadChunkType(FormChunkTypeStart, &FormChunk);
+
+    uint8 *FormChunkDataStart = (FileAddress + ID_WIDTH + 
+				    sizeof(FormChunk.DataSize) +
+				    sizeof(ID_WIDTH));
+    ReadChunkDataStart(FormChunkDataStart, &FormChunk);
+
+
 
 
 

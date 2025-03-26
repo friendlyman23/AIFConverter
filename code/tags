@@ -31,7 +31,7 @@
 !_TAG_OUTPUT_VERSION	0.0	/current.age/
 !_TAG_PARSER_VERSION!C++	1.1	/current.age/
 !_TAG_PATTERN_LENGTH_LIMIT	96	/0 for no limit/
-!_TAG_PROC_CWD	W:/converter/code/	//
+!_TAG_PROC_CWD	w:/converter/code/	//
 !_TAG_PROGRAM_AUTHOR	Universal Ctags Team	//
 !_TAG_PROGRAM_NAME	Universal Ctags	/Derived from Exuberant Ctags/
 !_TAG_PROGRAM_URL	https://ctags.io/	/official site/
@@ -44,16 +44,20 @@
 !_TAG_ROLE_DESCRIPTION!C++!module	imported	/imported with "imported ..."/
 !_TAG_ROLE_DESCRIPTION!C++!module	partOwner	/used for specifying a partition/
 !_TAG_ROLE_DESCRIPTION!C++!partition	imported	/imported with "imported ..."/
+Address	./win32_converter.cpp	/^    uint64 *Address;$/;"	m	struct:chunk_struct	typeref:typename:uint64 *	file:
 Assert	./win32_converter.cpp	/^#define Assert(/;"	d	file:
-Data	./win32_converter.cpp	/^    void *Data;$/;"	m	struct:form_chunk	typeref:typename:void *	file:
-DataSize	./win32_converter.cpp	/^    int32 DataSize;$/;"	m	struct:form_chunk	typeref:typename:int32	file:
-ID	./win32_converter.cpp	/^    char ID[ID_WIDTH + 1];$/;"	m	struct:form_chunk	typeref:typename:char[]	file:
+Data	./win32_converter.cpp	/^    uint8 *Data;$/;"	m	struct:chunk_struct	typeref:typename:uint8 *	file:
+DataSize	./win32_converter.cpp	/^    int32 DataSize;$/;"	m	struct:chunk_struct	typeref:typename:int32	file:
+FlipEndianness	./win32_converter.cpp	/^FlipEndianness(int32 IntToFlip)$/;"	f	typeref:typename:int32
+ID	./win32_converter.cpp	/^    char ID[ID_WIDTH + 1];$/;"	m	struct:chunk_struct	typeref:typename:char[]	file:
 ID_WIDTH	./win32_converter.cpp	/^#define ID_WIDTH /;"	d	file:
-Type	./win32_converter.cpp	/^    char Type[ID_WIDTH + 1];$/;"	m	struct:form_chunk	typeref:typename:char[]	file:
+PrintDebugString	./win32_converter.cpp	/^PrintDebugString(int32 i)$/;"	f	typeref:typename:void
+ReadChunkAddress	./win32_converter.cpp	/^ReadChunkAddress(uint8 *ChunkStart, chunk_struct *ChunkStruct)$/;"	f	typeref:typename:void
+ReadChunkID	./win32_converter.cpp	/^ReadChunkID(uint8 *ChunkStart, chunk_struct *ChunkStruct)$/;"	f	typeref:typename:void
+Type	./win32_converter.cpp	/^    char Type[ID_WIDTH + 1];$/;"	m	struct:chunk_struct	typeref:typename:char[]	file:
 Win32GetAifPointer	./win32_converter.cpp	/^Win32GetAifPointer(LPCWSTR Filename)$/;"	f	typeref:typename:void *
 WinMain	./win32_converter.cpp	/^int WinMain(HINSTANCE Instance, $/;"	f	typeref:typename:int
-form_chunk	./win32_converter.cpp	/^struct form_chunk$/;"	s	file:
-id	./win32_converter.cpp	/^#define id /;"	d	file:
+chunk_struct	./win32_converter.cpp	/^struct chunk_struct$/;"	s	file:
 int16	./win32_converter.cpp	/^typedef int16_t int16;$/;"	t	typeref:typename:int16_t	file:
 int32	./win32_converter.cpp	/^typedef int32_t int32;$/;"	t	typeref:typename:int32_t	file:
 int64	./win32_converter.cpp	/^typedef int64_t int64;$/;"	t	typeref:typename:int64_t	file:
