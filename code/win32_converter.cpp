@@ -14,6 +14,19 @@ typedef uint64_t uint64;
 
 #define Assert(Value) if(!(Value)) {*(int *)0 = 0;}
 
+/*
+ * The aif spec: https://www.mmsp.ece.mcgill.ca/Documents/AudioFormats/AIFF/AIFF.html 
+ * uses a C-like language to define an aif file's structure. This includes
+ * an "ID" data type, defined as follows:
+ *
+ *    "32 bits, the concatenation of four printable ASCII character (sic)
+ *    in the range ' ' (SP, 0x20) through '~' (0x7E).
+ *    Spaces (0x20) cannot precede printing characters; trailing spaces
+ *    are allowed. Control characters are forbidden."
+ *
+ * The spec declares multiple file header fields using the ID type.
+ * Per above, it is always 4 characters. We thus define it:
+*/
 #define ID_WIDTH 4
 
 void
@@ -78,35 +91,64 @@ Win32GetFilePointer(LPCWSTR Filename)
     return(FileAddress);
 }
 
-struct chunk_struct
+struct form_chunk
 {
-    uint64_t Address;
+    uint64 HeaderStart;
     char ID[ID_WIDTH + 1];
     int32 DataSize;
     char Type[ID_WIDTH + 1];
-    uint8 *DataStart;
+    uint64 DataStart;
+};
+
+struct common_chunk
+{
+    uint64 HeaderStart;
+    char ID[ID_WIDTH + 1];
+    int32 DataSize;
+    int16 NumChannels;
+    uint32 NumSampleFrames;
+    int16 SampleSize;
+    float SampleRate;
 };
 
 void
-ReadChunkAddress(uint64_t ChunkAddress, chunk_struct *ChunkStruct)
+ReadChunkAddress(uint64 ChunkAddress, form_chunk *FormChunk)
 {
-    ChunkStruct->Address = ChunkAddress;
+    FormChunk->HeaderStart = ChunkAddress;
 }
 
 void
-ReadChunkID(uint8 *ChunkIDStart, chunk_struct *ChunkStruct)
+ReadChunkAddress(uint64 ChunkAddress, common_chunk *CommonChunk)
+{
+    CommonChunk->HeaderStart = ChunkAddress;
+}
+
+void
+ReadChunkID(uint8 *ChunkIDStart, form_chunk *FormChunk)
 {
     for(int i = 0; i < ID_WIDTH; i++)
     {
 	uint8 *Letter = (uint8 *)(ChunkIDStart + i);
-	ChunkStruct->ID[i] = *Letter;
+	FormChunk->ID[i] = *Letter;
     }
 
-    ChunkStruct->ID[ID_WIDTH] = '\0';
+    FormChunk->ID[ID_WIDTH] = '\0';
 }
 
 void
-ReadChunkType(uint8 *ChunkTypeStart, chunk_struct *ChunkStruct)
+ReadChunkID(uint8 *ChunkIDStart, common_chunk *CommonChunk)
+{
+    for(int i = 0; i < ID_WIDTH; i++)
+    {
+	uint8 *Letter = (uint8 *)(ChunkIDStart + i);
+	CommonChunk->ID[i] = *Letter;
+    }
+
+    CommonChunk->ID[ID_WIDTH] = '\0';
+}
+
+void
+ReadChunkType(uint8 *ChunkTypeStart, form_chunk *ChunkStruct)
 {    
     for(int i = 0; i < ID_WIDTH; i++)
     {
@@ -118,7 +160,7 @@ ReadChunkType(uint8 *ChunkTypeStart, chunk_struct *ChunkStruct)
 }
 
 void
-ReadChunkDataStart(uint8 *ChunkDataStart, chunk_struct *ChunkStruct)
+ReadChunkDataStart(uint64 ChunkDataStart, form_chunk *ChunkStruct)
 {
     ChunkStruct->DataStart = ChunkDataStart;
 }
@@ -163,25 +205,74 @@ int WinMain(HINSTANCE Instance,
 {
     LPCWSTR Filename = L"SC88PR~1.AIF";
     uint8 *FileAddress = (uint8 *)Win32GetFilePointer(Filename);
-    chunk_struct FormChunk = {};
 
-    uint64_t FormChunkAddress = (uint64_t)FileAddress;
-    ReadChunkAddress(FormChunkAddress, &FormChunk);
+    form_chunk FormChunk = {};
 
-    uint8 *FormChunkIDStart = FileAddress;
+    uint64 FormChunkHeaderStart = (uint64)FileAddress;
+    ReadChunkAddress(FormChunkHeaderStart, &FormChunk);
+
+    uint8 *FormChunkIDStart = (uint8 *)FormChunk.HeaderStart;
     ReadChunkID(FormChunkIDStart, &FormChunk);
 
-    int32 *FormChunkDataSizeAddress = (int32 *)(FileAddress+ID_WIDTH);
+    int32 *FormChunkDataSizeAddress = (int32 *)(FormChunk.HeaderStart + ID_WIDTH);
     FormChunk.DataSize = FlipEndianness(*FormChunkDataSizeAddress);
 
-    uint8 *FormChunkTypeStart = (FileAddress + ID_WIDTH + 
+    uint8 *FormChunkTypeStart = (uint8 *)(FormChunk.HeaderStart + ID_WIDTH + 
 				    sizeof(FormChunk.DataSize));
     ReadChunkType(FormChunkTypeStart, &FormChunk);
 
-    uint8 *FormChunkDataStart = (FileAddress + ID_WIDTH + 
+    uint64 FormChunkDataStart = (uint64) (FormChunk.HeaderStart + ID_WIDTH + 
 				    sizeof(FormChunk.DataSize) +
 				    sizeof(ID_WIDTH));
     ReadChunkDataStart(FormChunkDataStart, &FormChunk);
+
+	/*   struct common_chunk*/
+	/*   {*/
+	/*uint64 HeaderStart;*/
+	/*char ID[ID_WIDTH + 1];*/
+	/*int32 DataSize;*/
+	/*int16 NumChannels;*/
+	/*uint32 NumSampleFrames;*/
+	/*int16 SampleSize;*/
+	/*float SampleRate;*/
+	/*   };*/
+
+    common_chunk CommonChunk = {};
+
+    uint64 CommonChunkHeaderStart = FormChunk.DataStart;
+    ReadChunkAddress(CommonChunkHeaderStart, &CommonChunk);
+
+    uint8 *CommonChunkIDStart = (uint8 *)CommonChunk.HeaderStart;
+    ReadChunkID(CommonChunkIDStart, &CommonChunk);
+
+    int32 *CommonChunkDataSizeAddress = (int32 *)(CommonChunkHeaderStart + 
+						    ID_WIDTH);
+    CommonChunk.DataSize = FlipEndianness(*CommonChunkDataSizeAddress);
+
+    //per the spec, DataSize is always 18
+    Assert(CommonChunk.DataSize == 18);
+
+    int16 CommonChunkNumChannels = (int16 *)(CommonChunk.HeaderStart + 
+						ID_WIDTH + 
+						sizeof(CommonChunk.DataSize));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
 
 
 

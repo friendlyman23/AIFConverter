@@ -50,26 +50,36 @@
 !_TAG_ROLE_DESCRIPTION!C++!module	imported	/imported with "imported ..."/
 !_TAG_ROLE_DESCRIPTION!C++!module	partOwner	/used for specifying a partition/
 !_TAG_ROLE_DESCRIPTION!C++!partition	imported	/imported with "imported ..."/
-Address	./code/win32_converter.cpp	/^    uint64_t Address;$/;"	m	struct:chunk_struct	typeref:typename:uint64_t	file:
 Assert	./code/win32_converter.cpp	/^#define Assert(/;"	d	file:
-DataSize	./code/win32_converter.cpp	/^    int32 DataSize;$/;"	m	struct:chunk_struct	typeref:typename:int32	file:
-DataStart	./code/win32_converter.cpp	/^    uint8 *DataStart;$/;"	m	struct:chunk_struct	typeref:typename:uint8 *	file:
+DataSize	./code/win32_converter.cpp	/^    int32 DataSize;$/;"	m	struct:common_chunk	typeref:typename:int32	file:
+DataSize	./code/win32_converter.cpp	/^    int32 DataSize;$/;"	m	struct:form_chunk	typeref:typename:int32	file:
+DataStart	./code/win32_converter.cpp	/^    uint64 DataStart;$/;"	m	struct:form_chunk	typeref:typename:uint64	file:
 FlipEndianness	./code/win32_converter.cpp	/^FlipEndianness(int32 IntToFlip)$/;"	f	typeref:typename:int32
 FolderType	./data/desktop.ini	/^FolderType=Generic$/;"	k	section:ViewState
-ID	./code/win32_converter.cpp	/^    char ID[ID_WIDTH + 1];$/;"	m	struct:chunk_struct	typeref:typename:char[]	file:
+HeaderStart	./code/win32_converter.cpp	/^    uint64 HeaderStart;$/;"	m	struct:common_chunk	typeref:typename:uint64	file:
+HeaderStart	./code/win32_converter.cpp	/^    uint64 HeaderStart;$/;"	m	struct:form_chunk	typeref:typename:uint64	file:
+ID	./code/win32_converter.cpp	/^    char ID[ID_WIDTH + 1];$/;"	m	struct:common_chunk	typeref:typename:char[]	file:
+ID	./code/win32_converter.cpp	/^    char ID[ID_WIDTH + 1];$/;"	m	struct:form_chunk	typeref:typename:char[]	file:
 ID_WIDTH	./code/win32_converter.cpp	/^#define ID_WIDTH /;"	d	file:
 Mode	./data/desktop.ini	/^Mode=$/;"	k	section:ViewState
+NumChannels	./code/win32_converter.cpp	/^    int16 NumChannels;$/;"	m	struct:common_chunk	typeref:typename:int16	file:
+NumSampleFrames	./code/win32_converter.cpp	/^    uint32 NumSampleFrames;$/;"	m	struct:common_chunk	typeref:typename:uint32	file:
 PrintDebugString	./code/win32_converter.cpp	/^PrintDebugString(int32 i)$/;"	f	typeref:typename:void
-ReadChunkAddress	./code/win32_converter.cpp	/^ReadChunkAddress(uint64_t ChunkAddress, chunk_struct *ChunkStruct)$/;"	f	typeref:typename:void
-ReadChunkDataStart	./code/win32_converter.cpp	/^ReadChunkDataStart(uint8 *ChunkDataStart, chunk_struct *ChunkStruct)$/;"	f	typeref:typename:void
-ReadChunkID	./code/win32_converter.cpp	/^ReadChunkID(uint8 *ChunkIDStart, chunk_struct *ChunkStruct)$/;"	f	typeref:typename:void
-ReadChunkType	./code/win32_converter.cpp	/^ReadChunkType(uint8 *ChunkTypeStart, chunk_struct *ChunkStruct)$/;"	f	typeref:typename:void
-Type	./code/win32_converter.cpp	/^    char Type[ID_WIDTH + 1];$/;"	m	struct:chunk_struct	typeref:typename:char[]	file:
+ReadChunkAddress	./code/win32_converter.cpp	/^ReadChunkAddress(uint64 ChunkAddress, common_chunk *CommonChunk)$/;"	f	typeref:typename:void
+ReadChunkAddress	./code/win32_converter.cpp	/^ReadChunkAddress(uint64 ChunkAddress, form_chunk *FormChunk)$/;"	f	typeref:typename:void
+ReadChunkDataStart	./code/win32_converter.cpp	/^ReadChunkDataStart(uint64 ChunkDataStart, form_chunk *ChunkStruct)$/;"	f	typeref:typename:void
+ReadChunkID	./code/win32_converter.cpp	/^ReadChunkID(uint8 *ChunkIDStart, common_chunk *CommonChunk)$/;"	f	typeref:typename:void
+ReadChunkID	./code/win32_converter.cpp	/^ReadChunkID(uint8 *ChunkIDStart, form_chunk *FormChunk)$/;"	f	typeref:typename:void
+ReadChunkType	./code/win32_converter.cpp	/^ReadChunkType(uint8 *ChunkTypeStart, form_chunk *ChunkStruct)$/;"	f	typeref:typename:void
+SampleRate	./code/win32_converter.cpp	/^    float SampleRate;$/;"	m	struct:common_chunk	typeref:typename:float	file:
+SampleSize	./code/win32_converter.cpp	/^    int16 SampleSize;$/;"	m	struct:common_chunk	typeref:typename:int16	file:
+Type	./code/win32_converter.cpp	/^    char Type[ID_WIDTH + 1];$/;"	m	struct:form_chunk	typeref:typename:char[]	file:
 Vid	./data/desktop.ini	/^Vid=$/;"	k	section:ViewState
 ViewState	./data/desktop.ini	/^[ViewState]$/;"	s
 Win32GetFilePointer	./code/win32_converter.cpp	/^Win32GetFilePointer(LPCWSTR Filename)$/;"	f	typeref:typename:void *
 WinMain	./code/win32_converter.cpp	/^int WinMain(HINSTANCE Instance, $/;"	f	typeref:typename:int
-chunk_struct	./code/win32_converter.cpp	/^struct chunk_struct$/;"	s	file:
+common_chunk	./code/win32_converter.cpp	/^struct common_chunk$/;"	s	file:
+form_chunk	./code/win32_converter.cpp	/^struct form_chunk$/;"	s	file:
 int16	./code/win32_converter.cpp	/^typedef int16_t int16;$/;"	t	typeref:typename:int16_t	file:
 int32	./code/win32_converter.cpp	/^typedef int32_t int32;$/;"	t	typeref:typename:int32_t	file:
 int64	./code/win32_converter.cpp	/^typedef int64_t int64;$/;"	t	typeref:typename:int64_t	file:
