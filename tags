@@ -50,11 +50,16 @@
 !_TAG_ROLE_DESCRIPTION!C++!module	imported	/imported with "imported ..."/
 !_TAG_ROLE_DESCRIPTION!C++!module	partOwner	/used for specifying a partition/
 !_TAG_ROLE_DESCRIPTION!C++!partition	imported	/imported with "imported ..."/
+ArrayCount	./code/win32_converter.cpp	/^#define ArrayCount(/;"	d	file:
 Assert	./code/win32_converter.cpp	/^#define Assert(/;"	d	file:
 DataSize	./code/win32_converter.cpp	/^    int32 DataSize;$/;"	m	struct:common_chunk	typeref:typename:int32	file:
 DataSize	./code/win32_converter.cpp	/^    int32 DataSize;$/;"	m	struct:form_chunk	typeref:typename:int32	file:
 DataStart	./code/win32_converter.cpp	/^    uint64 DataStart;$/;"	m	struct:form_chunk	typeref:typename:uint64	file:
+EXTENDED_WIDTH	./code/win32_converter.cpp	/^#define EXTENDED_WIDTH /;"	d	file:
+FlipEndianness	./code/win32_converter.cpp	/^FlipEndianness(int16 IntToFlip)$/;"	f	typeref:typename:int16
 FlipEndianness	./code/win32_converter.cpp	/^FlipEndianness(int32 IntToFlip)$/;"	f	typeref:typename:int32
+FlipEndianness	./code/win32_converter.cpp	/^FlipEndianness(uint32 IntToFlip)$/;"	f	typeref:typename:uint32
+FlipEndianness	./code/win32_converter.cpp	/^FlipEndianness(uint8 *FirstByteOfExtended)$/;"	f	typeref:typename:double
 FolderType	./data/desktop.ini	/^FolderType=Generic$/;"	k	section:ViewState
 HeaderStart	./code/win32_converter.cpp	/^    uint64 HeaderStart;$/;"	m	struct:common_chunk	typeref:typename:uint64	file:
 HeaderStart	./code/win32_converter.cpp	/^    uint64 HeaderStart;$/;"	m	struct:form_chunk	typeref:typename:uint64	file:
@@ -62,6 +67,7 @@ ID	./code/win32_converter.cpp	/^    char ID[ID_WIDTH + 1];$/;"	m	struct:common_c
 ID	./code/win32_converter.cpp	/^    char ID[ID_WIDTH + 1];$/;"	m	struct:form_chunk	typeref:typename:char[]	file:
 ID_WIDTH	./code/win32_converter.cpp	/^#define ID_WIDTH /;"	d	file:
 Mode	./data/desktop.ini	/^Mode=$/;"	k	section:ViewState
+NUM_BITS_IN_BYTE	./code/win32_converter.cpp	/^#define NUM_BITS_IN_BYTE /;"	d	file:
 NumChannels	./code/win32_converter.cpp	/^    int16 NumChannels;$/;"	m	struct:common_chunk	typeref:typename:int16	file:
 NumSampleFrames	./code/win32_converter.cpp	/^    uint32 NumSampleFrames;$/;"	m	struct:common_chunk	typeref:typename:uint32	file:
 PrintDebugString	./code/win32_converter.cpp	/^PrintDebugString(int32 i)$/;"	f	typeref:typename:void
@@ -71,7 +77,7 @@ ReadChunkDataStart	./code/win32_converter.cpp	/^ReadChunkDataStart(uint64 ChunkD
 ReadChunkID	./code/win32_converter.cpp	/^ReadChunkID(uint8 *ChunkIDStart, common_chunk *CommonChunk)$/;"	f	typeref:typename:void
 ReadChunkID	./code/win32_converter.cpp	/^ReadChunkID(uint8 *ChunkIDStart, form_chunk *FormChunk)$/;"	f	typeref:typename:void
 ReadChunkType	./code/win32_converter.cpp	/^ReadChunkType(uint8 *ChunkTypeStart, form_chunk *ChunkStruct)$/;"	f	typeref:typename:void
-SampleRate	./code/win32_converter.cpp	/^    float SampleRate;$/;"	m	struct:common_chunk	typeref:typename:float	file:
+SampleRate	./code/win32_converter.cpp	/^    double SampleRate;$/;"	m	struct:common_chunk	typeref:typename:double	file:
 SampleSize	./code/win32_converter.cpp	/^    int16 SampleSize;$/;"	m	struct:common_chunk	typeref:typename:int16	file:
 Type	./code/win32_converter.cpp	/^    char Type[ID_WIDTH + 1];$/;"	m	struct:form_chunk	typeref:typename:char[]	file:
 Vid	./data/desktop.ini	/^Vid=$/;"	k	section:ViewState
