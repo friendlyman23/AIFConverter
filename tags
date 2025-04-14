@@ -52,6 +52,7 @@
 !_TAG_ROLE_DESCRIPTION!C++!partition	imported	/imported with "imported ..."/
 ArrayCount	./code/win32_converter.cpp	/^#define ArrayCount(/;"	d	file:
 Assert	./code/win32_converter.cpp	/^#define Assert(/;"	d	file:
+BITS_IN_BYTE	./code/win32_converter.cpp	/^#define BITS_IN_BYTE /;"	d	file:
 DataSize	./code/win32_converter.cpp	/^    int32 DataSize;$/;"	m	struct:common_chunk	typeref:typename:int32	file:
 DataSize	./code/win32_converter.cpp	/^    int32 DataSize;$/;"	m	struct:form_chunk	typeref:typename:int32	file:
 DataStart	./code/win32_converter.cpp	/^    uint64 DataStart;$/;"	m	struct:form_chunk	typeref:typename:uint64	file:
@@ -67,7 +68,6 @@ ID	./code/win32_converter.cpp	/^    char ID[ID_WIDTH + 1];$/;"	m	struct:common_c
 ID	./code/win32_converter.cpp	/^    char ID[ID_WIDTH + 1];$/;"	m	struct:form_chunk	typeref:typename:char[]	file:
 ID_WIDTH	./code/win32_converter.cpp	/^#define ID_WIDTH /;"	d	file:
 Mode	./data/desktop.ini	/^Mode=$/;"	k	section:ViewState
-NUM_BITS_IN_BYTE	./code/win32_converter.cpp	/^#define NUM_BITS_IN_BYTE /;"	d	file:
 NumChannels	./code/win32_converter.cpp	/^    int16 NumChannels;$/;"	m	struct:common_chunk	typeref:typename:int16	file:
 NumSampleFrames	./code/win32_converter.cpp	/^    uint32 NumSampleFrames;$/;"	m	struct:common_chunk	typeref:typename:uint32	file:
 PrintDebugString	./code/win32_converter.cpp	/^PrintDebugString(int32 i)$/;"	f	typeref:typename:void

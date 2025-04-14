@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <math.h>
 
 typedef int8_t int8;
 typedef int16_t int16;
@@ -42,7 +43,7 @@ typedef uint64_t uint64;
  * the truncation would result in data loss.
 */
 #define EXTENDED_WIDTH 10
-#define NUM_BITS_IN_BYTE 8
+#define BITS_IN_BYTE 8
 
 
 
@@ -53,6 +54,16 @@ PrintDebugString(int32 i)
     sprintf_s(buffer, sizeof(buffer), "%d\n", i);
     OutputDebugStringA(buffer);
 }
+
+#if 0
+void
+PrintDebugString(double d)
+{
+    char buffer[256];
+    sprintf_s(buffer, sizeof(buffer), "%ld\n", d);
+    OutputDebugStringA(buffer);
+}
+#endif
 
 void *
 Win32GetFilePointer(LPCWSTR Filename)
@@ -125,7 +136,7 @@ struct common_chunk
     int16 NumChannels;
     uint32 NumSampleFrames;
     int16 SampleSize;
-    double SampleRate;
+    uint32 SampleRate;
 };
 
 void
@@ -199,6 +210,22 @@ FlipEndianness(int16 IntToFlip)
 
 }
 
+inline uint16
+FlipEndianness(uint16 IntToFlip)
+{
+    uint16 IntToWrite;
+
+    uint8 IntToFlipByteZero = IntToFlip & 255;
+    uint8 IntToFlipByteOne = (IntToFlip >> 8) & 255;
+
+    uint16 IntToWriteByteOne = (uint16) IntToFlipByteZero << 8;
+    uint16 IntToWriteByteZero = (uint16) IntToFlipByteOne;
+
+    IntToWrite = (uint16) (IntToWriteByteOne | IntToWriteByteZero);
+
+    return(IntToWrite);
+
+}
 inline int32 
 FlipEndianness(int32 IntToFlip)
 {
@@ -245,23 +272,99 @@ FlipEndianness(uint32 IntToFlip)
     return(IntToWrite);
 }
 
+inline uint64
+FlipEndianness(uint64 IntToFlip)
+{
+    uint64 IntToWrite = 0;
+
+    for(int i = 0; i < sizeof(uint64); i++)
+    {
+	uint64 ByteToFlip = 0;
+
+	int ShiftRightAmt = i * 8;
+	ByteToFlip = (IntToFlip >> ShiftRightAmt) & (uint8) 0xFF;
+	
+	int ShiftLeftAmt = 56 - (i * 8);
+	IntToWrite |= (ByteToFlip << ShiftLeftAmt);
+    }
+
+    return(IntToWrite);
+    
+}
+
+#if 0
 inline double 
 FlipEndianness(uint8 *FirstByteOfExtended)
 {
-    double DoubleToWrite = 0;
-    uint8 ExtendedBytes[EXTENDED_WIDTH] = {};
+    uint8 DoubleToWriteByteArray[sizeof(double)] = {};
+    uint64 DoubleToFlip = *((uint64 *)FirstByteOfExtended);
 
-    uint8 *Index = FirstByteOfExtended;
-    for(int i = 0; i < EXTENDED_WIDTH; i++)
+    if(*(FirstByteOfExtended + (EXTENDED_WIDTH - 1)) > 0)
     {
-	if((i >= 8) && (*Index != 0))
+	return(0);
+    }
+    else if(*(FirstByteOfExtended + (EXTENDED_WIDTH - 2)) > 0)
+    {
+	return(0);
+    }
+    else
+    {
+	for(int i = 0; i < sizeof(double); i++)
 	{
-	    return(DoubleToWrite);
+	    int Offset = i * BITS_IN_BYTE;
+	    int ArrayIndex = (ArrayCount(DoubleToWriteByteArray) - 1 - i);
+
+	    DoubleToWriteByteArray[ArrayIndex] = 
+		((DoubleToFlip >> Offset) & 0xFF);
 	}
-	ExtendedBytes[i] = *Index++;
     }
 
-    return(DoubleToWrite);
+    double DoubleToWrite = 0;
+    for(int i = 0; ArrayCount(DoubleToWriteByteArray); i++)
+    {
+	int ShiftAmount = sizeof(double) - (i * BITS_IN_BYTE);
+	uint8 DoubleByte = DoubleToWriteByteArray[i]; 
+	DoubleToWrite = 
+	    DoubleToWrite | (double)(((uint64)DoubleByte) << ShiftAmount);
+
+    }
+
+
+    return((double) 1);
+}
+#endif
+
+inline uint32
+GetSampleRate(uint8 *FirstBitOfExtendedPrecisionFloat)
+{
+    uint8 RawBitArray[10];
+
+    for(int i = 0; i < ArrayCount(RawBitArray); i++)
+    {
+	RawBitArray[i] = *(FirstBitOfExtendedPrecisionFloat + i);
+    }
+
+    uint16 Exponent = 0;
+    Exponent |= RawBitArray[0] << 8;
+    Exponent |= RawBitArray[1];
+    Exponent &= 0x7FFF;
+    
+    int ExtendedPrecisionBiasAmount = -16383;
+    Exponent += ExtendedPrecisionBiasAmount;
+
+    uint64 FractionBits = 0;
+    for(int i = 0; i < sizeof(uint64); i++)
+    {
+	int RawBitIndex = i + 2;
+	int ShiftAmount = 56 - (i * 8);
+	FractionBits |= ((uint64)RawBitArray[RawBitIndex] << ShiftAmount);
+    }
+    FractionBits &= 0x7FFFFFFFFFFFFFFF;
+    FractionBits <<= 1;
+
+    double Fraction = (double)FractionBits / (double)UINT64_MAX;
+    Fraction += 1;
+    return(Fraction * pow(2, Exponent));
 }
 
 int WinMain(HINSTANCE Instance, 
@@ -292,17 +395,6 @@ int WinMain(HINSTANCE Instance,
 				    sizeof(ID_WIDTH));
     ReadChunkDataStart(FormChunkDataStart, &FormChunk);
 
-	/*   struct common_chunk*/
-	/*   {*/
-	/*uint64 HeaderStart;*/
-	/*char ID[ID_WIDTH + 1];*/
-	/*int32 DataSize;*/
-	/*int16 NumChannels;*/
-	/*uint32 NumSampleFrames;*/
-	/*int16 SampleSize;*/
-	/*float SampleRate;*/
-	/*   };*/
-
     common_chunk CommonChunk = {};
 
     uint8 *FileIndex = (uint8 *)FormChunk.DataStart;
@@ -331,14 +423,7 @@ int WinMain(HINSTANCE Instance,
     CommonChunk.SampleSize = FlipEndianness(*CommonChunkSampleSize);
 
     FileIndex += sizeof(CommonChunk.SampleSize);
-    uint8 *CommonChunkSampleRate = FileIndex;
-    CommonChunk.SampleRate = FlipEndianness(CommonChunkSampleRate);
-
-/*7	   6	      5		 4*/
-/*98765432 10987654 32109876 54321098*/
-/*01000000 00001110 10101100 01000100 00000000 00000000 00000000 00000000 00000000 00000000 00000000*/
-/*SEEEEEEE EEEEIFFF FFFFFFFF FFFFFFFF*/
-
+    CommonChunk.SampleRate = GetSampleRate(FileIndex);
 
     return(0);
 }
