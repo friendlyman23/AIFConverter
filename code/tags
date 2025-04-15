@@ -56,7 +56,7 @@ FlipEndianness	./win32_converter.cpp	/^FlipEndianness(int32 IntToFlip)$/;"	f	typ
 FlipEndianness	./win32_converter.cpp	/^FlipEndianness(uint16 IntToFlip)$/;"	f	typeref:typename:uint16
 FlipEndianness	./win32_converter.cpp	/^FlipEndianness(uint32 IntToFlip)$/;"	f	typeref:typename:uint32
 FlipEndianness	./win32_converter.cpp	/^FlipEndianness(uint64 IntToFlip)$/;"	f	typeref:typename:uint64
-GetSampleRate	./win32_converter.cpp	/^GetSampleRate(uint8 *FirstBitOfExtendedPrecisionFloat)$/;"	f	typeref:typename:uint32
+GetSampleRate	./win32_converter.cpp	/^GetSampleRate(uint8 *FirstByteOfExtendedPrecisionFloat)$/;"	f	typeref:typename:uint32
 HeaderStart	./win32_converter.cpp	/^    uint64 HeaderStart;$/;"	m	struct:common_chunk	typeref:typename:uint64	file:
 HeaderStart	./win32_converter.cpp	/^    uint64 HeaderStart;$/;"	m	struct:form_chunk	typeref:typename:uint64	file:
 ID	./win32_converter.cpp	/^    char ID[ID_WIDTH + 1];$/;"	m	struct:common_chunk	typeref:typename:char[]	file:

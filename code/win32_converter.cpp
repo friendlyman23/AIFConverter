@@ -272,6 +272,41 @@ FlipEndianness(uint32 IntToFlip)
     return(IntToWrite);
 }
 
+inline uint32
+GetSampleRate(uint8 *FirstByteOfExtendedPrecisionFloat)
+{
+
+    uint16 ExponentBytesToFlip = *(uint16 *)FirstByteOfExtendedPrecisionFloat; 
+    uint16 Exponent = 0;
+    Exponent = (
+		(uint16)((ExponentBytesToFlip & 255) << 8) |
+		(uint16)((ExponentBytesToFlip >> 8) & 255)
+		);
+    int32 ExtendedPrecisionFloatingPointExponentBias = -16383;
+    Exponent += ExtendedPrecisionFloatingPointExponentBias;
+
+    FirstByteOfExtendedPrecisionFloat += 2;
+    uint64 FractionBytesToFlip = *(uint64 *)FirstByteOfExtendedPrecisionFloat;
+    uint64 Fraction = 0;
+
+    Fraction = (
+			(uint64)((FractionBytesToFlip & 255) << 56) |
+			(uint64)(((FractionBytesToFlip >> 8) & 255) << 48) |
+			(uint64)(((FractionBytesToFlip >> 16) & 255) << 40) |
+			(uint64)(((FractionBytesToFlip >> 24) & 255) << 32) |
+			(uint64)(((FractionBytesToFlip >> 32) & 255) << 24) |
+			(uint64)(((FractionBytesToFlip >> 40) & 255) << 16) |
+			(uint64)(((FractionBytesToFlip >> 48) & 255) << 8) |
+			(uint64)(((FractionBytesToFlip >> 56) & 255))
+		);
+
+    int32 TimesToShiftRight = 63 - Exponent;
+    Fraction >>= TimesToShiftRight;
+
+    return(Fraction);
+    
+}
+
 inline uint64
 FlipEndianness(uint64 IntToFlip)
 {
@@ -290,81 +325,6 @@ FlipEndianness(uint64 IntToFlip)
 
     return(IntToWrite);
     
-}
-
-#if 0
-inline double 
-FlipEndianness(uint8 *FirstByteOfExtended)
-{
-    uint8 DoubleToWriteByteArray[sizeof(double)] = {};
-    uint64 DoubleToFlip = *((uint64 *)FirstByteOfExtended);
-
-    if(*(FirstByteOfExtended + (EXTENDED_WIDTH - 1)) > 0)
-    {
-	return(0);
-    }
-    else if(*(FirstByteOfExtended + (EXTENDED_WIDTH - 2)) > 0)
-    {
-	return(0);
-    }
-    else
-    {
-	for(int i = 0; i < sizeof(double); i++)
-	{
-	    int Offset = i * BITS_IN_BYTE;
-	    int ArrayIndex = (ArrayCount(DoubleToWriteByteArray) - 1 - i);
-
-	    DoubleToWriteByteArray[ArrayIndex] = 
-		((DoubleToFlip >> Offset) & 0xFF);
-	}
-    }
-
-    double DoubleToWrite = 0;
-    for(int i = 0; ArrayCount(DoubleToWriteByteArray); i++)
-    {
-	int ShiftAmount = sizeof(double) - (i * BITS_IN_BYTE);
-	uint8 DoubleByte = DoubleToWriteByteArray[i]; 
-	DoubleToWrite = 
-	    DoubleToWrite | (double)(((uint64)DoubleByte) << ShiftAmount);
-
-    }
-
-
-    return((double) 1);
-}
-#endif
-
-inline uint32
-GetSampleRate(uint8 *FirstBitOfExtendedPrecisionFloat)
-{
-    uint8 RawBitArray[10];
-
-    for(int i = 0; i < ArrayCount(RawBitArray); i++)
-    {
-	RawBitArray[i] = *(FirstBitOfExtendedPrecisionFloat + i);
-    }
-
-    uint16 Exponent = 0;
-    Exponent |= RawBitArray[0] << 8;
-    Exponent |= RawBitArray[1];
-    Exponent &= 0x7FFF;
-    
-    int ExtendedPrecisionBiasAmount = -16383;
-    Exponent += ExtendedPrecisionBiasAmount;
-
-    uint64 FractionBits = 0;
-    for(int i = 0; i < sizeof(uint64); i++)
-    {
-	int RawBitIndex = i + 2;
-	int ShiftAmount = 56 - (i * 8);
-	FractionBits |= ((uint64)RawBitArray[RawBitIndex] << ShiftAmount);
-    }
-    FractionBits &= 0x7FFFFFFFFFFFFFFF;
-    FractionBits <<= 1;
-
-    double Fraction = (double)FractionBits / (double)UINT64_MAX;
-    Fraction += 1;
-    return(Fraction * pow(2, Exponent));
 }
 
 int WinMain(HINSTANCE Instance, 
@@ -424,6 +384,17 @@ int WinMain(HINSTANCE Instance,
 
     FileIndex += sizeof(CommonChunk.SampleSize);
     CommonChunk.SampleRate = GetSampleRate(FileIndex);
+
+
+#if 0
+    uint8_t FortyEightKSampleRate[10] = {
+	0x40, 0x0E, // Sign and exponent
+	0xBB, 0x80, 0x00, 0x00, //Fraction bits
+	0x00, 0x00, 0x00, 0x00
+    };
+
+    int32 Result = GetSampleRate(FortyEightKSampleRate);
+#endif
 
     return(0);
 }
