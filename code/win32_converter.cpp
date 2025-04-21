@@ -18,6 +18,22 @@ typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef uint64_t uint64;
 
+static char *MidiNoteLUT[128] = {
+    /*  0 – 11 */   "C-2",  "C#-2", "D-2",  "D#-2", "E-2",  "F-2",  "F#-2", "G-2",  "G#-2", "A-2",  "A#-2", "B-2",
+    /* 12 – 23 */   "C-1",  "C#-1", "D-1",  "D#-1", "E-1",  "F-1",  "F#-1", "G-1",  "G#-1", "A-1",  "A#-1", "B-1",
+    /* 24 – 35 */   "C0",   "C#0",  "D0",   "D#0",  "E0",   "F0",   "F#0",  "G0",   "G#0",  "A0",   "A#0",  "B0",
+    /* 36 – 47 */   "C1",   "C#1",  "D1",   "D#1",  "E1",   "F1",   "F#1",  "G1",   "G#1",  "A1",   "A#1",  "B1",
+    /* 48 – 59 */   "C2",   "C#2",  "D2",   "D#2",  "E2",   "F2",   "F#2",  "G2",   "G#2",  "A2",   "A#2",  "B2",
+    /* 60 – 71 */   "C3",   "C#3",  "D3",   "D#3",  "E3",   "F3",   "F#3",  "G3",   "G#3",  "A3",   "A#3",  "B3",
+    /* 72 – 83 */   "C4",   "C#4",  "D4",   "D#4",  "E4",   "F4",   "F#4",  "G4",   "G#4",  "A4",   "A#4",  "B4",
+    /* 84 – 95 */   "C5",   "C#5",  "D5",   "D#5",  "E5",   "F5",   "F#5",  "G5",   "G#5",  "A5",   "A#5",  "B5",
+    /* 96 –107 */   "C6",   "C#6",  "D6",   "D#6",  "E6",   "F6",   "F#6",  "G6",   "G#6",  "A6",   "A#6",  "B6",
+    /*108 –119 */   "C7",   "C#7",  "D7",   "D#7",  "E7",   "F7",   "F#7",  "G7",   "G#7",  "A7",   "A#7",  "B7",
+    /*120 –127 */   "C8",   "C#8",  "D8",   "D#8",  "E8",   "F8",   "F#8",  "G8"
+};
+
+// stop: update inst struct chars to point to LUT
+
 #define Assert(Value) if(!(Value)) {*(int *)0 = 0;}
 #define ArrayCount(Array) sizeof(Array) / (sizeof(Array[0]))
 
@@ -44,8 +60,29 @@ typedef uint64_t uint64;
 */
 #define EXTENDED_WIDTH 10
 #define BITS_IN_BYTE 8
+#define MAX_STRING_LEN 255 
 
+/* TODO:
+ *    1. For chunk types that should only appear once in a file, assert one doesn't already exist
+ *	    when we start reading
+ *
+ *    2. Use Windows data types in the platform layer
+ *
+ *    3. Make File Index advancement mechanic more explicit by
+ *	  having the read chunk functions return a BytesRead
+ *	  value and then increment the FileIndex pointer by
+ *	  that value
+ *
+ *    4. unify terminology in struct fields e.g. "DataSize" vs. "ChunkSize"
+ *
+ *    5. test InstrumentChunk loop parsers with nonzero data
+ *    
+ *    6. have ReadID return bytes read and use this to
+ *	    advance FileIndex
+ *	  
+*/
 
+#include "converter.h"
 
 void
 PrintDebugString(int32 i)
@@ -101,10 +138,6 @@ Win32GetFilePointer(LPCWSTR Filename)
 		    OutputDebugStringA("failed to allocate memory\n");
 		}
 	    }
-	    else
-	    {
-		OutputDebugStringA("failed to get process heap handle\n");
-	    }
 	}
 	else
 	{
@@ -119,79 +152,72 @@ Win32GetFilePointer(LPCWSTR Filename)
     return(FileAddress);
 }
 
-struct form_chunk
-{
-    uint64 HeaderStart;
-    char ID[ID_WIDTH + 1];
-    int32 DataSize;
-    char Type[ID_WIDTH + 1];
-    uint64 DataStart;
-};
 
-struct common_chunk
+uint8 *
+ReadAddress(uint8 *AddressOfHeaderInFile)
 {
-    uint64 HeaderStart;
-    char ID[ID_WIDTH + 1];
-    int32 DataSize;
-    int16 NumChannels;
-    uint32 NumSampleFrames;
-    int16 SampleSize;
-    uint32 SampleRate;
-};
-
-void
-ReadChunkAddress(uint64 ChunkAddress, form_chunk *FormChunk)
-{
-    FormChunk->HeaderStart = ChunkAddress;
+    return(AddressOfHeaderInFile);
 }
 
 void
-ReadChunkAddress(uint64 ChunkAddress, common_chunk *CommonChunk)
-{
-    CommonChunk->HeaderStart = ChunkAddress;
-}
-
-void
-ReadChunkID(uint8 *ChunkIDStart, form_chunk *FormChunk)
+ReadID(char *IDStart, char *ID)
 {
     for(int i = 0; i < ID_WIDTH; i++)
     {
-	uint8 *Letter = (uint8 *)(ChunkIDStart + i);
-	FormChunk->ID[i] = *Letter;
+	char *Letter = (char *)(IDStart + i);
+	ID[i] = *Letter;
     }
 
-    FormChunk->ID[ID_WIDTH] = '\0';
+    ID[ID_WIDTH] = '\0';
 }
 
-void
-ReadChunkID(uint8 *ChunkIDStart, common_chunk *CommonChunk)
+inline int32
+GetIntFromAsciiDigit(char AsciiDigit)
 {
-    for(int i = 0; i < ID_WIDTH; i++)
-    {
-	uint8 *Letter = (uint8 *)(ChunkIDStart + i);
-	CommonChunk->ID[i] = *Letter;
-    }
-
-    CommonChunk->ID[ID_WIDTH] = '\0';
+    return AsciiDigit - '0';
 }
 
-void
-ReadChunkType(uint8 *ChunkTypeStart, form_chunk *ChunkStruct)
-{    
-    for(int i = 0; i < ID_WIDTH; i++)
-    {
-	uint8 *Letter = (uint8 *)(ChunkTypeStart + i);
-	ChunkStruct->Type[i] = *Letter;
-    }
+/*void*/
+/*ReadChunkID(uint8 *ChunkIDStart, form_chunk *FormChunk)*/
+/*{*/
+/*    for(int i = 0; i < ID_WIDTH; i++)*/
+/*    {*/
+/*	uint8 *Letter = (uint8 *)(ChunkIDStart + i);*/
+/*	FormChunk->ID[i] = *Letter;*/
+/*    }*/
+/**/
+/*    FormChunk->ID[ID_WIDTH] = '\0';*/
+/*}*/
+/**/
+/*void*/
+/*ReadChunkID(uint8 *ChunkIDStart, common_chunk *CommonChunk)*/
+/*{*/
+/*    for(int i = 0; i < ID_WIDTH; i++)*/
+/*    {*/
+/*	uint8 *Letter = (uint8 *)(ChunkIDStart + i);*/
+/*	CommonChunk->ID[i] = *Letter;*/
+/*    }*/
+/**/
+/*    CommonChunk->ID[ID_WIDTH] = '\0';*/
+/*}*/
 
-    ChunkStruct->Type[ID_WIDTH] = '\0';
-}
+/*void*/
+/*ReadChunkType(uint8 *ChunkTypeStart, form_chunk *ChunkStruct)*/
+/*{    */
+/*    for(int i = 0; i < ID_WIDTH; i++)*/
+/*    {*/
+/*	uint8 *Letter = (uint8 *)(ChunkTypeStart + i);*/
+/*	ChunkStruct->Type[i] = *Letter;*/
+/*    }*/
+/**/
+/*    ChunkStruct->Type[ID_WIDTH] = '\0';*/
+/*}*/
 
-void
-ReadChunkDataStart(uint64 ChunkDataStart, form_chunk *ChunkStruct)
-{
-    ChunkStruct->DataStart = ChunkDataStart;
-}
+/*void*/
+/*ReadChunkDataStart(uint64 ChunkDataStart, form_chunk *ChunkStruct)*/
+/*{*/
+/*    ChunkStruct->DataStart = ChunkDataStart;*/
+/*}*/
 
 inline int16
 FlipEndianness(int16 IntToFlip)
@@ -327,44 +353,125 @@ FlipEndianness(uint64 IntToFlip)
     
 }
 
+void
+ReadMarkerChunkHeader(uint8 *MarkerChunkHeaderStart, marker_chunk_header *MarkerChunkHeader)
+{
+    //stop: check this function
+    //	rewrite it so that we pass in a pointer to an uninitialized
+    //	marker chunk structure and fill it out
+
+    uint8 *MarkerChunkIndex = MarkerChunkHeaderStart;
+
+    MarkerChunkHeader->Address = MarkerChunkIndex;
+    char *MarkerChunkHeaderIDStart = (char *)MarkerChunkHeader->Address;
+    ReadID(MarkerChunkHeaderIDStart, MarkerChunkHeader->ID);
+    MarkerChunkIndex += sizeof(MarkerChunkHeader->ID) - 1;
+    int32 *MarkerChunkHeaderSize = (int32 *)MarkerChunkIndex;
+    MarkerChunkHeader->Size = FlipEndianness(*MarkerChunkHeaderSize);
+    MarkerChunkIndex += sizeof(MarkerChunkHeader->Size);
+    uint16 *MarkerChunkHeaderNumMarkers = (uint16 *)MarkerChunkIndex;
+    MarkerChunkHeader->NumMarkers = FlipEndianness(*MarkerChunkHeaderNumMarkers);
+}
+
+int32 
+ProcessFillerChunk(uint8 *FillerChunkStart, filler_chunk *FillerChunk)
+{
+    int32 NumBytesRead = 0;
+
+    uint8 *FillerChunkIndex = FillerChunkStart;
+    char *FillerChunkIDStart = (char *)FillerChunkIndex;
+    ReadID(FillerChunkIDStart, FillerChunk->ID);
+    NumBytesRead += sizeof(FillerChunk->ID) - 1;
+
+    FillerChunkIndex += sizeof(FillerChunk->ID) - 1;
+    uint32 *NumFillerBytes = (uint32 *)FillerChunkIndex;
+    FillerChunk->NumFillerBytes = FlipEndianness(*NumFillerBytes);
+    NumBytesRead += sizeof(FillerChunk->NumFillerBytes);
+
+    return(NumBytesRead);
+}
+
+void 
+ProcessSoundDataChunkHeader(uint8 *SoundDataChunkHeaderStart, sound_data_chunk_header *SoundDataChunkHeader)
+{
+    uint8 *SoundDataChunkHeaderIndex = SoundDataChunkHeaderStart;
+
+    char *SoundDataChunkHeaderIDStart = (char *)SoundDataChunkHeaderIndex;
+    ReadID(SoundDataChunkHeaderIDStart, SoundDataChunkHeader->ID);
+    SoundDataChunkHeaderIndex += sizeof(SoundDataChunkHeader->ID) - 1;
+
+    int32 *SoundDataChunkHeaderSize = (int32 *)SoundDataChunkHeaderIndex;
+    SoundDataChunkHeader->ChunkSize = FlipEndianness(*SoundDataChunkHeaderSize);
+    SoundDataChunkHeaderIndex += sizeof(SoundDataChunkHeader->ChunkSize);
+
+    uint32 *SoundDataChunkHeaderOffset = (uint32 *)SoundDataChunkHeaderIndex;
+    SoundDataChunkHeader->Offset = FlipEndianness(*SoundDataChunkHeaderOffset);
+    SoundDataChunkHeaderIndex += sizeof(SoundDataChunkHeader->Offset);
+
+    uint32 *SoundDataChunkHeaderBlockSize = (uint32 *)SoundDataChunkHeaderIndex;
+    SoundDataChunkHeader->BlockSize = FlipEndianness(*SoundDataChunkHeaderBlockSize);
+    SoundDataChunkHeaderIndex += sizeof(SoundDataChunkHeader->BlockSize);
+
+    SoundDataChunkHeader->SoundData = SoundDataChunkHeaderIndex;
+}
+
 int WinMain(HINSTANCE Instance, 
 	HINSTANCE PrevInstance, 
 	PSTR CmdLine, 
 	int CmdShow)
 {
     LPCWSTR Filename = L"SC88PR~1.AIF";
-    uint8 *FileAddress = (uint8 *)Win32GetFilePointer(Filename);
+    uint8 *FileAddress;
+
+    HANDLE HeapHandle = GetProcessHeap();
+    if(HeapHandle)
+    {
+	FileAddress = (uint8 *)Win32GetFilePointer(Filename);
+    }
+    else
+    {
+	OutputDebugStringA("failed to get process heap handle\n");
+	return(0);
+    }
+
+    uint8 *FileIndex = FileAddress;
 
     form_chunk FormChunk = {};
 
-    uint64 FormChunkHeaderStart = (uint64)FileAddress;
-    ReadChunkAddress(FormChunkHeaderStart, &FormChunk);
+    uint8 *FormChunkStart = FileIndex;
+    FormChunk.Address = ReadAddress(FormChunkStart);
 
-    uint8 *FormChunkIDStart = (uint8 *)FormChunk.HeaderStart;
-    ReadChunkID(FormChunkIDStart, &FormChunk);
+    char *FormChunkIDStart = (char *)FormChunk.Address;
+    ReadID(FormChunkIDStart, FormChunk.ID);
 
-    int32 *FormChunkDataSizeAddress = (int32 *)(FormChunk.HeaderStart + ID_WIDTH);
+    FileIndex += sizeof(FormChunk.ID) - 1;
+    int32 *FormChunkDataSizeAddress = (int32 *)FileIndex;
     FormChunk.DataSize = FlipEndianness(*FormChunkDataSizeAddress);
 
-    uint8 *FormChunkTypeStart = (uint8 *)(FormChunk.HeaderStart + ID_WIDTH + 
-				    sizeof(FormChunk.DataSize));
-    ReadChunkType(FormChunkTypeStart, &FormChunk);
+    FileIndex += sizeof(FormChunk.DataSize);
+    char *FormChunkTypeStart = (char *)FileIndex;
+    ReadID(FormChunkTypeStart, FormChunk.Type);
 
-    uint64 FormChunkDataStart = (uint64) (FormChunk.HeaderStart + ID_WIDTH + 
-				    sizeof(FormChunk.DataSize) +
-				    sizeof(ID_WIDTH));
-    ReadChunkDataStart(FormChunkDataStart, &FormChunk);
+    FileIndex += sizeof(FormChunk.Type) - 1;
+    uint8 *FormChunkDataStart = FileIndex;
+    FormChunk.DataStart = ReadAddress(FormChunkDataStart);
+/* 
+    uint8 *FormChunkAddress = FileIndex;
+    FormChunk.Address = ReadAddress(FormChunkAddress);
 
+    uint8 *FormChunkIDStart = (uint8 *)FormChunk.Address;
+    ReadID(FormChunkIDStart, FormChunk.ID);
+*/
     common_chunk CommonChunk = {};
 
-    uint8 *FileIndex = (uint8 *)FormChunk.DataStart;
-    uint64 CommonChunkHeaderStart = (uint64)FileIndex;
-    ReadChunkAddress(CommonChunkHeaderStart, &CommonChunk);
+    FileIndex = FormChunk.DataStart;
+    uint8 *CommonChunkStart = FileIndex;
+    CommonChunk.Address = ReadAddress(CommonChunkStart);
 
-    uint8 *CommonChunkIDStart = (uint8 *)CommonChunk.HeaderStart;
-    ReadChunkID(CommonChunkIDStart, &CommonChunk);
+    char *CommonChunkIDStart = (char *)CommonChunk.Address;
+    ReadID(CommonChunkIDStart, CommonChunk.ID);
 
-    FileIndex += ID_WIDTH;
+    FileIndex += sizeof(CommonChunk.ID) - 1;
     int32 *CommonChunkDataSizeAddress = (int32 *)FileIndex;
     CommonChunk.DataSize = FlipEndianness(*CommonChunkDataSizeAddress);
     //per the spec, DataSize is always 18
@@ -384,6 +491,150 @@ int WinMain(HINSTANCE Instance,
 
     FileIndex += sizeof(CommonChunk.SampleSize);
     CommonChunk.SampleRate = GetSampleRate(FileIndex);
+
+    FileIndex += EXTENDED_WIDTH;
+    marker_chunk_header MarkerChunkHeader = {};
+    ReadMarkerChunkHeader(FileIndex, &MarkerChunkHeader);
+    int32 BytesRead = ((sizeof(MarkerChunkHeader.ID ) - 1) + 
+		    sizeof(MarkerChunkHeader.Size));
+    FileIndex += BytesRead;
+    uint8 *MarkersIndex = FileIndex + sizeof(MarkerChunkHeader.NumMarkers);
+    marker *Markers = 0;
+
+    if(MarkerChunkHeader.NumMarkers != 0)
+    {
+	int32 HeapSpaceForMarkers = (sizeof(marker) * MarkerChunkHeader.NumMarkers);
+	Markers = (marker *)HeapAlloc(HeapHandle, HEAP_ZERO_MEMORY, HeapSpaceForMarkers);
+	MarkerChunkHeader.Markers = Markers;
+
+	for(int ThisMarker = 0; ThisMarker < MarkerChunkHeader.NumMarkers; ThisMarker++)
+	{
+	    Markers[ThisMarker] = {};
+	    int16 *MarkerID = (int16 *)MarkersIndex;
+	    Markers[ThisMarker].ID = FlipEndianness(*MarkerID);
+	    MarkersIndex += sizeof(Markers[ThisMarker].ID);
+	    uint32 *MarkerPosition = (uint32 *)MarkersIndex;
+	    Markers[ThisMarker].Position = FlipEndianness(*MarkerPosition);
+	    MarkersIndex += sizeof(Markers[ThisMarker].Position);
+	    uint8 *PStringLen = MarkersIndex;
+	    Markers[ThisMarker].PString.StringLength = *PStringLen;
+	    MarkersIndex += sizeof(Markers[ThisMarker].PString.StringLength);
+	    uint8 *PStringIndex = MarkersIndex;
+	    for(int i = 0; i < Markers[ThisMarker].PString.StringLength; i++)
+	    {
+		char *Letter = (char *)(PStringIndex + i);
+		Markers[ThisMarker].PString.Letters[i] = *Letter;
+		
+	    }
+	    uint8 WhereToPutNullChar = Markers[ThisMarker].PString.StringLength;
+	    Markers[ThisMarker].PString.Letters[WhereToPutNullChar] = '\0';
+	    MarkersIndex += Markers[ThisMarker].PString.StringLength;
+
+	}
+    }
+
+    FileIndex += MarkerChunkHeader.Size;
+
+    instrument_chunk InstrumentChunk = {};
+
+    char *InstrumentChunkIDStart = (char *)FileIndex;
+    ReadID(InstrumentChunkIDStart, InstrumentChunk.ID);
+    FileIndex += sizeof(InstrumentChunk.ID) - 1;
+
+
+    /*int32 ChunkSize;*/
+    int32 *InstrumentChunkSize = (int32 *)FileIndex;
+    InstrumentChunk.ChunkSize = FlipEndianness(*InstrumentChunkSize);
+    FileIndex += sizeof(InstrumentChunk.ChunkSize);
+
+    /*char BaseNote;*/
+    int8 *BaseNote = (int8 *)FileIndex;
+    InstrumentChunk.BaseNote = *BaseNote;
+    InstrumentChunk.BaseNoteDecode = MidiNoteLUT[InstrumentChunk.BaseNote];
+    FileIndex += sizeof(InstrumentChunk.BaseNote);
+
+    /*char Detune;*/
+    char *Detune = (char *)FileIndex;
+    InstrumentChunk.Detune = *Detune;
+    FileIndex += sizeof(InstrumentChunk.Detune);
+
+    /*char LowNote;*/
+    char *LowNote = (char *)FileIndex;
+    InstrumentChunk.LowNote = *LowNote;
+    InstrumentChunk.LowNoteDecode = MidiNoteLUT[InstrumentChunk.LowNote];
+    FileIndex += sizeof(InstrumentChunk.LowNote);
+
+    /*char HighNote;*/
+    char *HighNote = (char *)FileIndex;
+    InstrumentChunk.HighNote = *HighNote;
+    InstrumentChunk.HighNoteDecode = MidiNoteLUT[InstrumentChunk.HighNote];
+    FileIndex += sizeof(InstrumentChunk.HighNote);
+
+    /*char LowVelocity;*/
+    char *LowVelocity = (char *)FileIndex;
+    InstrumentChunk.LowVelocity = *LowVelocity;
+    FileIndex += sizeof(InstrumentChunk.LowVelocity);
+
+    /*char HighVelocity;*/
+    char *HighVelocity = (char *)FileIndex;
+    InstrumentChunk.HighVelocity = *HighVelocity;
+    FileIndex += sizeof(InstrumentChunk.HighVelocity);
+
+    /*int16 Gain;*/
+    int16 *Gain = (int16 *)FileIndex;
+    InstrumentChunk.Gain = FlipEndianness(*Gain);
+    FileIndex += sizeof(InstrumentChunk.Gain);
+
+    /*loop *SustainLoop;*/
+    int16 *SustainLoopPlayMode = (int16 *)FileIndex;
+    InstrumentChunk.SustainLoop.PlayMode = FlipEndianness(*SustainLoopPlayMode);
+    FileIndex += sizeof(InstrumentChunk.SustainLoop.PlayMode);
+    int16 *SustainLoopBeginLoopMarker = (int16 *)FileIndex;
+    InstrumentChunk.SustainLoop.BeginLoopMarker = FlipEndianness(*SustainLoopBeginLoopMarker);
+    FileIndex += sizeof(InstrumentChunk.SustainLoop.BeginLoopMarker);
+    int16 *SustainLoopEndLoopMarker = (int16 *)FileIndex;
+    InstrumentChunk.SustainLoop.EndLoopMarker = FlipEndianness(*SustainLoopEndLoopMarker);
+    FileIndex += sizeof(InstrumentChunk.SustainLoop.EndLoopMarker);
+
+    /*loop *ReleaseLoop;*/
+    int16 *ReleaseLoopPlayMode = (int16 *)FileIndex;
+    InstrumentChunk.ReleaseLoop.PlayMode = FlipEndianness(*ReleaseLoopPlayMode);
+    FileIndex += sizeof(InstrumentChunk.ReleaseLoop.PlayMode);
+    int16 *ReleaseLoopBeginLoopMarker = (int16 *)FileIndex;
+    InstrumentChunk.ReleaseLoop.BeginLoopMarker = FlipEndianness(*ReleaseLoopBeginLoopMarker);
+    FileIndex += sizeof(InstrumentChunk.ReleaseLoop.BeginLoopMarker);
+    int16 *ReleaseLoopEndLoopMarker = (int16 *)FileIndex;
+    InstrumentChunk.ReleaseLoop.EndLoopMarker = FlipEndianness(*ReleaseLoopEndLoopMarker);
+    FileIndex += sizeof(InstrumentChunk.ReleaseLoop.EndLoopMarker);
+
+    filler_chunk FillerChunk = {};
+    int32 BytesReadInFillerChunk = ProcessFillerChunk(FileIndex, &FillerChunk);
+
+    FileIndex += BytesReadInFillerChunk;
+    FileIndex += FillerChunk.NumFillerBytes;
+
+    //we may have just skipped thousands of bytes so assert
+    //we aren't off in no man's land
+    Assert(*FileIndex != 0);
+
+    sound_data_chunk_header SoundDataChunkHeader = {};
+    ProcessSoundDataChunkHeader(FileIndex, &SoundDataChunkHeader);
+    FileIndex = SoundDataChunkHeader.SoundData;
+
+
+
+
+
+
+
+
+
+
+    
+
+
+
+    
 
 
 #if 0
