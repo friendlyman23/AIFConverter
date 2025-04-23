@@ -93,7 +93,7 @@ struct sound_data_chunk_header
     int32 ChunkSize;
     uint32 Offset;
     uint32 BlockSize;
-    uint8 *SoundData;
+    uint8 *DataStart;
 };
 
 #define CONVERTER_H

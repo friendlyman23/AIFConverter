@@ -60,6 +60,7 @@ ChunkSize	./converter.h	/^    int32 ChunkSize;$/;"	m	struct:sound_data_chunk_hea
 DataSize	./converter.h	/^    int32 DataSize;$/;"	m	struct:common_chunk	typeref:typename:int32
 DataSize	./converter.h	/^    int32 DataSize;$/;"	m	struct:form_chunk	typeref:typename:int32
 DataStart	./converter.h	/^    uint8 *DataStart;$/;"	m	struct:form_chunk	typeref:typename:uint8 *
+DataStart	./converter.h	/^    uint8 *DataStart;$/;"	m	struct:sound_data_chunk_header	typeref:typename:uint8 *
 Detune	./converter.h	/^    int8 Detune;$/;"	m	struct:instrument_chunk	typeref:typename:int8
 EXTENDED_WIDTH	./win32_converter.cpp	/^#define EXTENDED_WIDTH /;"	d	file:
 EndLoopMarker	./converter.h	/^    int16 EndLoopMarker;$/;"	m	struct:loop	typeref:typename:int16
@@ -107,7 +108,6 @@ ReleaseLoop	./converter.h	/^    loop ReleaseLoop;$/;"	m	struct:instrument_chunk	
 SampleRate	./converter.h	/^    uint32 SampleRate;$/;"	m	struct:common_chunk	typeref:typename:uint32
 SampleSize	./converter.h	/^    int16 SampleSize;$/;"	m	struct:common_chunk	typeref:typename:int16
 Size	./converter.h	/^    int32 Size;$/;"	m	struct:marker_chunk_header	typeref:typename:int32
-SoundData	./converter.h	/^    uint8 *SoundData;$/;"	m	struct:sound_data_chunk_header	typeref:typename:uint8 *
 StringLength	./converter.h	/^    uint8 StringLength;$/;"	m	struct:pstring	typeref:typename:uint8
 SustainLoop	./converter.h	/^    loop SustainLoop;$/;"	m	struct:instrument_chunk	typeref:typename:loop
 Type	./converter.h	/^    char Type[ID_WIDTH + 1];$/;"	m	struct:form_chunk	typeref:typename:char[]

@@ -18,6 +18,8 @@ typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef uint64_t uint64;
 
+
+
 static char *MidiNoteLUT[128] = {
     /*  0 – 11 */   "C-2",  "C#-2", "D-2",  "D#-2", "E-2",  "F-2",  "F#-2", "G-2",  "G#-2", "A-2",  "A#-2", "B-2",
     /* 12 – 23 */   "C-1",  "C#-1", "D-1",  "D#-1", "E-1",  "F-1",  "F#-1", "G-1",  "G#-1", "A-1",  "A#-1", "B-1",
@@ -412,7 +414,7 @@ ProcessSoundDataChunkHeader(uint8 *SoundDataChunkHeaderStart, sound_data_chunk_h
     SoundDataChunkHeader->BlockSize = FlipEndianness(*SoundDataChunkHeaderBlockSize);
     SoundDataChunkHeaderIndex += sizeof(SoundDataChunkHeader->BlockSize);
 
-    SoundDataChunkHeader->SoundData = SoundDataChunkHeaderIndex;
+    SoundDataChunkHeader->DataStart = SoundDataChunkHeaderIndex;
 }
 
 int WinMain(HINSTANCE Instance, 
@@ -619,22 +621,51 @@ int WinMain(HINSTANCE Instance,
 
     sound_data_chunk_header SoundDataChunkHeader = {};
     ProcessSoundDataChunkHeader(FileIndex, &SoundDataChunkHeader);
-    FileIndex = SoundDataChunkHeader.SoundData;
+    FileIndex = SoundDataChunkHeader.DataStart;
+    int32 BytesPerSample = CommonChunk.SampleSize / BITS_IN_BYTE;
+    int32 BytesNeededForFlippedSamples = (CommonChunk.NumSampleFrames * 
+					CommonChunk.NumChannels * 
+					BytesPerSample);
 
-
-
-
-
-
-
-
-
-
+    uint8 *FlippedSamplesStart = (uint8 *)HeapAlloc(HeapHandle, 
+						HEAP_ZERO_MEMORY, 
+						BytesNeededForFlippedSamples);
+    uint8 *SamplesToFlipStart = SoundDataChunkHeader.DataStart;
     
+    int BytesInSampleFrame = BytesPerSample * CommonChunk.NumChannels;
+    int HowManyBytesToFlip = BytesInSampleFrame * CommonChunk.NumSampleFrames;
+    int SampleBytesWritten = 0;
+    int SampleBytesRead = 0;
 
+    for(int SampleFrame = 0;
+	    SampleFrame < HowManyBytesToFlip; 
+	    SampleFrame += BytesInSampleFrame)
+    {
+	for(int Channel = 0;
+		Channel < CommonChunk.NumChannels;
+		Channel++)
+	{
+	    int SampleFrameOffset = Channel * BytesPerSample;
 
+	    uint8 FirstByteOfSamplePoint = SamplesToFlipStart[SampleFrame + SampleFrameOffset];
+	    SampleBytesRead++;
+	    uint8 SecondByteOfSamplePoint = SamplesToFlipStart[SampleFrame + SampleFrameOffset + 1];
+	    SampleBytesRead++;
+	    uint8 ThirdByteOfSamplePoint = SamplesToFlipStart[SampleFrame + SampleFrameOffset + 2];	    
+	    SampleBytesRead++;
+	    uint8 Mask = (FirstByteOfSamplePoint) ^ (ThirdByteOfSamplePoint);
+	    FlippedSamplesStart[SampleFrame + SampleFrameOffset] = (FirstByteOfSamplePoint) ^ Mask;
+	    SampleBytesWritten++;
+	    FlippedSamplesStart[SampleFrame + SampleFrameOffset + 1] = SecondByteOfSamplePoint;
+	    SampleBytesWritten++;
+	    FlippedSamplesStart[SampleFrame + SampleFrameOffset + 2] = (ThirdByteOfSamplePoint) ^ Mask;
+	    SampleBytesWritten++;
+	}
 
+    }
     
+    HeapFree(HeapHandle, 0, Markers);
+    HeapFree(HeapHandle, 0, FlippedSamplesStart);
 
 
 #if 0
