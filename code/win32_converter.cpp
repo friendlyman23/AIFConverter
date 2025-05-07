@@ -7,6 +7,7 @@ typedef int8_t int8;
 typedef int16_t int16;
 typedef int32_t int32;
 typedef int64_t int64;
+typedef int32 bool32;
 
 typedef uint8_t uint8;
 typedef uint16_t uint16;
@@ -18,51 +19,8 @@ typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef uint64_t uint64;
 
+static HANDLE HeapHandle = GetProcessHeap();
 
-
-static char *MidiNoteLUT[128] = {
-    /*  0 – 11 */   "C-2",  "C#-2", "D-2",  "D#-2", "E-2",  "F-2",  "F#-2", "G-2",  "G#-2", "A-2",  "A#-2", "B-2",
-    /* 12 – 23 */   "C-1",  "C#-1", "D-1",  "D#-1", "E-1",  "F-1",  "F#-1", "G-1",  "G#-1", "A-1",  "A#-1", "B-1",
-    /* 24 – 35 */   "C0",   "C#0",  "D0",   "D#0",  "E0",   "F0",   "F#0",  "G0",   "G#0",  "A0",   "A#0",  "B0",
-    /* 36 – 47 */   "C1",   "C#1",  "D1",   "D#1",  "E1",   "F1",   "F#1",  "G1",   "G#1",  "A1",   "A#1",  "B1",
-    /* 48 – 59 */   "C2",   "C#2",  "D2",   "D#2",  "E2",   "F2",   "F#2",  "G2",   "G#2",  "A2",   "A#2",  "B2",
-    /* 60 – 71 */   "C3",   "C#3",  "D3",   "D#3",  "E3",   "F3",   "F#3",  "G3",   "G#3",  "A3",   "A#3",  "B3",
-    /* 72 – 83 */   "C4",   "C#4",  "D4",   "D#4",  "E4",   "F4",   "F#4",  "G4",   "G#4",  "A4",   "A#4",  "B4",
-    /* 84 – 95 */   "C5",   "C#5",  "D5",   "D#5",  "E5",   "F5",   "F#5",  "G5",   "G#5",  "A5",   "A#5",  "B5",
-    /* 96 –107 */   "C6",   "C#6",  "D6",   "D#6",  "E6",   "F6",   "F#6",  "G6",   "G#6",  "A6",   "A#6",  "B6",
-    /*108 –119 */   "C7",   "C#7",  "D7",   "D#7",  "E7",   "F7",   "F#7",  "G7",   "G#7",  "A7",   "A#7",  "B7",
-    /*120 –127 */   "C8",   "C#8",  "D8",   "D#8",  "E8",   "F8",   "F#8",  "G8"
-};
-
-// stop: update inst struct chars to point to LUT
-
-#define Assert(Value) if(!(Value)) {*(int *)0 = 0;}
-#define ArrayCount(Array) sizeof(Array) / (sizeof(Array[0]))
-
-/*
- * The aif spec: https://www.mmsp.ece.mcgill.ca/Documents/AudioFormats/AIFF/AIFF.html 
- * uses a C-like language to define an aif file's structure. This includes
- * an "ID" data type, defined as follows:
- *
- *    "32 bits, the concatenation of four printable ASCII character (sic)
- *    in the range ' ' (SP, 0x20) through '~' (0x7E).
- *    Spaces (0x20) cannot precede printing characters; trailing spaces
- *    are allowed. Control characters are forbidden."
- *
- * The spec declares multiple file header fields using the ID type.
- * Per above, it is always 4 characters. We thus define it:
-*/
-#define ID_WIDTH 4
-
-/*
- * aif stores sample rate in an 80-bit (10-byte) floating point data type
- * called "extended." MSVC doesn't support this type. We attempt to
- * truncate it and store it in a double. We abort the conversion if
- * the truncation would result in data loss.
-*/
-#define EXTENDED_WIDTH 10
-#define BITS_IN_BYTE 8
-#define MAX_STRING_LEN 255 
 
 /* TODO:
  *    1. For chunk types that should only appear once in a file, assert one doesn't already exist
@@ -70,39 +28,49 @@ static char *MidiNoteLUT[128] = {
  *
  *    2. Use Windows data types in the platform layer
  *
- *    3. Make File Index advancement mechanic more explicit by
- *	  having the read chunk functions return a BytesRead
- *	  value and then increment the FileIndex pointer by
- *	  that value
+ *    3. unify terminology in struct fields e.g. "DataSize" vs. "ChunkSize"
  *
- *    4. unify terminology in struct fields e.g. "DataSize" vs. "ChunkSize"
- *
- *    5. test InstrumentChunk loop parsers with nonzero data
+ *    4. test InstrumentChunk loop parsers with nonzero data
  *    
- *    6. have ReadID return bytes read and use this to
- *	    advance FileIndex
- *	  
+ *    5. update ints for wav headers to be signed unless
+ *	    they're 8 bits wide
+ *
+ *    6. Check to see that the functions we try to inline actually get inlined when
+ *	  we turn on optimization
 */
 
 #include "converter.h"
 
 void
-PrintDebugString(int32 i)
+DebugPrintInt(int i)
 {
-    char buffer[256];
-    sprintf_s(buffer, sizeof(buffer), "%d\n", i);
-    OutputDebugStringA(buffer);
+    char PrintBuffer[256];
+    sprintf_s(PrintBuffer, sizeof(PrintBuffer), "%d\n", i);
+    OutputDebugStringA(PrintBuffer);
 }
 
-#if 0
 void
-PrintDebugString(double d)
+DebugPrintString(char *s)
 {
-    char buffer[256];
-    sprintf_s(buffer, sizeof(buffer), "%ld\n", d);
-    OutputDebugStringA(buffer);
+    char PrintBuffer[256];
+    sprintf_s(PrintBuffer, sizeof(PrintBuffer), "%s\n", s);
+    OutputDebugStringA(PrintBuffer);
 }
-#endif
+
+void
+DebugPrintDouble(double d)
+{
+    char PrintBuffer[256];
+    sprintf_s(PrintBuffer, sizeof(PrintBuffer), "%a\n", d);
+    OutputDebugStringA(PrintBuffer);
+}
+
+inline uint8 *
+AdvancePointer(uint8 *AifChunkStart, int32 BytesRead)
+{
+    uint8 *NewAddress = (uint8 *)(AifChunkStart + BytesRead);
+    return(NewAddress);
+}
 
 void *
 Win32GetFilePointer(LPCWSTR Filename)
@@ -155,10 +123,20 @@ Win32GetFilePointer(LPCWSTR Filename)
 }
 
 
-uint8 *
+inline uint8 *
 ReadAddress(uint8 *AddressOfHeaderInFile)
 {
     return(AddressOfHeaderInFile);
+}
+
+
+void
+SteenCopy(uint8 *MemToCopy, uint8 *MemDestination, uint32 BytesToCopy)
+{
+    for(int BytesCopied = 0; BytesCopied < BytesToCopy; BytesCopied++)
+    {
+	*MemDestination++ = *MemToCopy++;
+    }
 }
 
 void
@@ -173,53 +151,65 @@ ReadID(char *IDStart, char *ID)
     ID[ID_WIDTH] = '\0';
 }
 
-inline int32
-GetIntFromAsciiDigit(char AsciiDigit)
+bool32 
+AreIDsTheSame(char *IDToCheck, char *IDToCheckAgainst)
 {
-    return AsciiDigit - '0';
+    for(int LetterIndex = 0; LetterIndex < ID_WIDTH; LetterIndex++)
+    {
+	char *LetterToCheck = (IDToCheck + LetterIndex);
+	char *LetterToCheckAgainst = (IDToCheckAgainst + LetterIndex);
+	if(*LetterToCheck != *LetterToCheckAgainst)
+	{
+	    return(false);
+	}
+    }
+    return(true);
 }
 
-/*void*/
-/*ReadChunkID(uint8 *ChunkIDStart, form_chunk *FormChunk)*/
-/*{*/
-/*    for(int i = 0; i < ID_WIDTH; i++)*/
-/*    {*/
-/*	uint8 *Letter = (uint8 *)(ChunkIDStart + i);*/
-/*	FormChunk->ID[i] = *Letter;*/
-/*    }*/
-/**/
-/*    FormChunk->ID[ID_WIDTH] = '\0';*/
-/*}*/
-/**/
-/*void*/
-/*ReadChunkID(uint8 *ChunkIDStart, common_chunk *CommonChunk)*/
-/*{*/
-/*    for(int i = 0; i < ID_WIDTH; i++)*/
-/*    {*/
-/*	uint8 *Letter = (uint8 *)(ChunkIDStart + i);*/
-/*	CommonChunk->ID[i] = *Letter;*/
-/*    }*/
-/**/
-/*    CommonChunk->ID[ID_WIDTH] = '\0';*/
-/*}*/
+void
+ValidateID(char *IDToCheck, char *IDToCheckAgainst, char *CallingFunction)
+{
+    if(!AreIDsTheSame(IDToCheck, IDToCheckAgainst))
+    {
+	char DebugPrintStringBuffer[MAX_STRING_LEN];
+	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+		    "\nERROR:\n\t"
+		    "In function"
+		    "\n\t\t%s"
+		    "\n\texpected to read ID" 
+		    "\n\t\t%s"
+		    "\n\tbut instead read\n\t\t%s\n", 
+		    CallingFunction, IDToCheckAgainst, IDToCheck);
+	OutputDebugStringA((char *)DebugPrintStringBuffer);
+	exit(1);
+    }
+}
 
-/*void*/
-/*ReadChunkType(uint8 *ChunkTypeStart, form_chunk *ChunkStruct)*/
-/*{    */
-/*    for(int i = 0; i < ID_WIDTH; i++)*/
-/*    {*/
-/*	uint8 *Letter = (uint8 *)(ChunkTypeStart + i);*/
-/*	ChunkStruct->Type[i] = *Letter;*/
-/*    }*/
-/**/
-/*    ChunkStruct->Type[ID_WIDTH] = '\0';*/
-/*}*/
+bool32 
+AreIntsTheSame(int IntToCheck, int IntToCheckAgainst)
+{
+    return(IntToCheck == IntToCheckAgainst);
+}
 
-/*void*/
-/*ReadChunkDataStart(uint64 ChunkDataStart, form_chunk *ChunkStruct)*/
-/*{*/
-/*    ChunkStruct->DataStart = ChunkDataStart;*/
-/*}*/
+void
+ValidateInteger(int IntToCheck, int IntToCheckAgainst, char *CallingFunction)
+{
+    if(!AreIntsTheSame(IntToCheck, IntToCheckAgainst))
+    {
+	char DebugPrintStringBuffer[MAX_STRING_LEN];
+	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+		"\nERROR:\n\t"
+		"In function"
+		"\n\t\t%s"
+		"\n\texpected to read integer" 
+		"\n\t\t%d"
+		"\n\tbut instead read\n\t\t%d\n", 
+		CallingFunction, IntToCheck, IntToCheckAgainst);
+	OutputDebugStringA((char *)DebugPrintStringBuffer);
+	exit(1);
+    }
+}
+
 
 inline int16
 FlipEndianness(int16 IntToFlip)
@@ -300,23 +290,56 @@ FlipEndianness(uint32 IntToFlip)
     return(IntToWrite);
 }
 
+// This function parses the 10-byte, "extended-width" floating point
+//    number that .aif files use to encode sample rate. It returns
+//    the integer value of the floating point number. This is because
+//    we want to output a .wav file, and .wav files (sensibly) encode 
+//    sample rates with integers, not floats. I have never seen a fractional
+//    sample rate for audio.
+//    
+//    Since Microsoft's C++ compiler does not even recognize 10-byte
+//    floats, we can only pass a pointer to the first byte,
+//    then parse its components byte-by-byte, ultimately
+//    converting the value to an integer with arithmetic.
 inline uint32
 GetSampleRate(uint8 *FirstByteOfExtendedPrecisionFloat)
 {
 
-    uint16 ExponentBytesToFlip = *(uint16 *)FirstByteOfExtendedPrecisionFloat; 
+    uint8 *ExtendedIndex = FirstByteOfExtendedPrecisionFloat;
+
+    // The first bit of the 10-byte float is the sign bit. We
+    //	  assume the sign bit is not set (i.e., we assume a 
+    //	  positive sample rate) since we can't imagine what point
+    //	  there would be to a sample rate that is less than zero.
+    //
+    //	  The 15 bits that follow the sign bit represent the 
+    //	  exponent field.
+    //
+    //	  So we take the sign bit and the exponent bits together as
+    //	  a 16-bit unsigned int, assuming that the sign bit is not set.
+    uint16 ExponentBytesToFlip = *(uint16 *)ExtendedIndex; 
     uint16 Exponent = 0;
+
+    // Flip the endianness of the two exponent bytes
     Exponent = (
 		(uint16)((ExponentBytesToFlip & 255) << 8) |
 		(uint16)((ExponentBytesToFlip >> 8) & 255)
 		);
+
+    // This is the bias value for the exponent for 10 byte floats
     int32 ExtendedPrecisionFloatingPointExponentBias = -16383;
+    // Add it to the encoded value to arrive at the unbiased exponent
     Exponent += ExtendedPrecisionFloatingPointExponentBias;
 
-    FirstByteOfExtendedPrecisionFloat += 2;
-    uint64 FractionBytesToFlip = *(uint64 *)FirstByteOfExtendedPrecisionFloat;
+    // Move the pointer beyond the exponent field so that it points at
+    //	  the first byte of the fraction field
+    ExtendedIndex += 2;
+    uint64 FractionBytesToFlip = *(uint64 *)ExtendedIndex;
     uint64 Fraction = 0;
 
+    //todo: do we need to cast every 8-bit portion to a uint64
+    
+    // Flip the endianness of the fraction bytes
     Fraction = (
 			(uint64)((FractionBytesToFlip & 255) << 56) |
 			(uint64)(((FractionBytesToFlip >> 8) & 255) << 48) |
@@ -325,55 +348,264 @@ GetSampleRate(uint8 *FirstByteOfExtendedPrecisionFloat)
 			(uint64)(((FractionBytesToFlip >> 32) & 255) << 24) |
 			(uint64)(((FractionBytesToFlip >> 40) & 255) << 16) |
 			(uint64)(((FractionBytesToFlip >> 48) & 255) << 8) |
-			(uint64)(((FractionBytesToFlip >> 56) & 255))
+			(uint64)((FractionBytesToFlip >> 56) & 255)
 		);
 
+    // Shift the fraction bits to the right in accordance with the
+    //	  exponent value
     int32 TimesToShiftRight = 63 - Exponent;
     Fraction >>= TimesToShiftRight;
 
     return(Fraction);
-    
 }
 
-inline uint64
-FlipEndianness(uint64 IntToFlip)
-{
-    uint64 IntToWrite = 0;
+// Functions named with the pattern "AppReadAif...Chunk" read the 
+//    header information of the .aif file we put on the heap 
+//    and store its relevant data in structs on the stack.
+//
+//    We later use these data to output a .wav file.
+//    
+//    The Form Chunk parsing function is the first one 
+//    to be called because, per the spec, all .aif files 
+//    begin with Form Chunks. 
+//
+//    It is heavily annotated for clarity; 
+//    other "AppReadAif...Chunk" functions are not because they 
+//    generally follow the patttern established here.
 
-    for(int i = 0; i < sizeof(uint64); i++)
+int32
+AppReadAifFormChunk(uint8 *AifFormChunkStart, form_chunk *FormChunk)
+{
+    // We return the number of bytes this function read from the 
+    //	  .aif file so main() knows how many bytes to skip to get to 
+    //	  the next chunk in the .aif file
+    int32 BytesRead = 0;
+
+    // Declare a pointer to a single byte that we use to advance 
+    //	  through the chunk and parse its data
+    uint8 *AifFormChunkIndex = AifFormChunkStart;
+
+    // Store the address of the first byte of the Form Chunk
+    FormChunk->Address = ReadAddress(AifFormChunkIndex);
+
+    // These AppReadAif...Chunk functions do not represent a large
+    //	  share of the program's workload, so for readability,
+    //	  we always declare a new pointer to each header item
+    //	  as we encounter it, that explicitly names what it points to...
+    char *AifFormChunkIDStart = (char *)FormChunk->Address;
+
+    // ...and pass this pointer to a corresponding function
+    //	  that parses it and stores its relevant data on the stack.
+    ReadID(AifFormChunkIDStart, (char *)(&FormChunk->ID));
+
+    // Since all ID fields for a given chunk are known 
+    //	  at compile time, we check all IDs to confirm
+    //	  that we read what we expected to read.
+    // 
+    //	  Per .aif spec, Form Chunk ID is always "FORM"
+    ValidateID(FormChunk->ID, "FORM", __func__);
+
+    // After confirming that we read valid data, we compute the number
+    //	  of bytes read from this chunk so far...
+    BytesRead += ID_WIDTH;
+
+
+    // ...and pass this total, along with the address of the first byte
+    //	  of the chunk, to compute the address of the next datum
+    //	  to be read.
+    AifFormChunkIndex = AdvancePointer(AifFormChunkStart, BytesRead);
+
+    // and we keep doing this until we've finished parsing the chunk!
+    int32 *AifFormChunkDataSizeAddress = (int32 *)AifFormChunkIndex;
+    FormChunk->DataSize = FlipEndianness(*AifFormChunkDataSizeAddress);
+    BytesRead += sizeof(FormChunk->DataSize);
+
+    AifFormChunkIndex = AdvancePointer(AifFormChunkStart, BytesRead);
+    char *AifFormChunkTypeStart = (char *)AifFormChunkIndex;
+    ReadID(AifFormChunkTypeStart, (char *)(FormChunk->Type));
+
+    // Per .aif spec, Form Chunk Type is always "AIFF"
+    ValidateID(FormChunk->Type, "AIFF", __func__);
+    BytesRead += ID_WIDTH;
+
+    // The "data" of the Form Chunk is everything else
+    //	  in the entire aif file.
+    AifFormChunkIndex = AdvancePointer(AifFormChunkStart, BytesRead);
+    uint8 *AifFormChunkDataStart = AifFormChunkIndex;
+    FormChunk->DataStart = ReadAddress(AifFormChunkDataStart);
+
+    return(BytesRead);
+}
+
+int32
+AppReadAifCommonChunk(uint8 *AifCommonChunkStart, common_chunk *CommonChunk)
+{
+
+    // Keep track of number of bytes we've read so that
+    //	  we can compute necessary offsets
+    int32 BytesRead = 0;
+    uint8 *AifCommonChunkIndex = AifCommonChunkStart;
+
+    // Store the address of the first byte of the Common Chunk
+    CommonChunk->Address = ReadAddress(AifCommonChunkStart);
+
+    // Store the Common Chunk ID in its struct on the stack
+    char *AifCommonChunkIDStart = (char *)CommonChunk->Address;
+    ReadID(AifCommonChunkIDStart, (char *)CommonChunk->ID);
+    // Check that we read a valid ID
+    ValidateID(CommonChunk->ID, "COMM", __func__);
+    // Compute updated BytesRead value
+    BytesRead += ID_WIDTH;
+
+    // Store the size of the Common Chunk
+    AifCommonChunkIndex = AdvancePointer(AifCommonChunkStart, BytesRead);
+    int32 *AifCommonChunkDataSizeAddress = (int32 *)AifCommonChunkIndex;
+    CommonChunk->DataSize = FlipEndianness(*AifCommonChunkDataSizeAddress);
+    // per the spec, DataSize is always 18
+    ValidateInteger(CommonChunk->DataSize, 18, __func__);
+    BytesRead += sizeof(CommonChunk->DataSize);
+
+    // Store the number of audio channels
+    AifCommonChunkIndex = AdvancePointer(AifCommonChunkStart, BytesRead);
+    int16 *AifCommonChunkNumChannels = (int16 *)AifCommonChunkIndex;
+    CommonChunk->NumChannels = FlipEndianness(*AifCommonChunkNumChannels);
+    BytesRead += sizeof(CommonChunk->NumChannels);
+
+    // Store the number of sample frames
+    AifCommonChunkIndex = AdvancePointer(AifCommonChunkStart, BytesRead);
+    uint32 *AifCommonChunkNumSampleFrames = (uint32 *)AifCommonChunkIndex;
+    CommonChunk->NumSampleFrames = FlipEndianness(*AifCommonChunkNumSampleFrames);
+    BytesRead += sizeof(CommonChunk->NumSampleFrames);
+
+    // Store the sample size (the number of bytes dedicated to each sample)
+    AifCommonChunkIndex = AdvancePointer(AifCommonChunkStart, BytesRead);
+    int16 *AifCommonChunkSampleSize = (int16 *)AifCommonChunkIndex;
+    CommonChunk->SampleSize = FlipEndianness(*AifCommonChunkSampleSize);
+    BytesRead += sizeof(CommonChunk->SampleSize);
+
+    // .aif files use a 10-byte, extended-width floating point number
+    //	  to represent sample rate. See comments on the GetSampleRate
+    //	  function for details.
+    AifCommonChunkIndex = AdvancePointer(AifCommonChunkStart, BytesRead);
+    uint8 *AifCommonChunkSampleRate = AifCommonChunkIndex;
+    CommonChunk->SampleRate = GetSampleRate(AifCommonChunkSampleRate);
+    BytesRead += EXTENDED_WIDTH;
+
+    return(BytesRead);
+}
+
+// .aif files may need to specify the position of certain samples in the file
+//    for use by software. For example, imagine a musician playing a digital
+//    instrument based on a pre-recorded violin sound. The musician expects the
+//    violin sound to sustain for as long as they hold down a key on their midi
+//    keyboard.
+//
+//    .aif files encode such direction for software via a "Marker" chunk. 
+//    In the example of the sustaining violin, an .aif file declares
+//    the location of two Markers in the file that represent the beginning
+//    and end points of the sustain phase. While the musician holds down the key,
+//    the software "loops" over the samples between between the two Markers; 
+//    when the key is released, the software plays the remainder of the samples.
+//
+//    Note that markers are not required. An .aif file containing a recording
+//    of a snare drum, which is triggered once and does not loop, would probably
+//    not include them.
+//
+//    For readability, we first read the header portion of the Marker chunk,
+//    then read the actual Marker data in a separate function.
+int32
+AppReadAifMarkerChunkHeader(uint8 *AifMarkerChunkHeaderStart, marker_chunk_header *MarkerChunkHeader)
+{
+    
+    // Keep track of number of bytes we've read so that
+    //	  we can compute necessary offsets
+    int32 BytesRead = 0;
+    uint8 *AifMarkerChunkHeaderIndex = AifMarkerChunkHeaderStart;
+
+    // Store the address of the first byte of the Marker Chunk
+    MarkerChunkHeader->Address = AifMarkerChunkHeaderStart;
+
+    // Store the Marker Chunk ID in its struct on the stack
+    char *AifMarkerChunkHeaderIDStart = (char *)AifMarkerChunkHeaderIndex;
+    ReadID(AifMarkerChunkHeaderIDStart, MarkerChunkHeader->ID);
+    // Check that we read a valid ID
+    ValidateID(MarkerChunkHeader->ID, "MARK", __func__);
+    // Compute updated BytesRead value
+    BytesRead += ID_WIDTH;
+
+    // Store the size of the Marker Chunk
+    AifMarkerChunkHeaderIndex = AdvancePointer(AifMarkerChunkHeaderStart, BytesRead);
+    int32 *AifMarkerChunkHeaderSize = (int32 *)AifMarkerChunkHeaderIndex;
+    MarkerChunkHeader->Size = FlipEndianness(*AifMarkerChunkHeaderSize);
+    BytesRead += sizeof(MarkerChunkHeader->Size);
+
+    // Store the number of Markers. We use this value later to know
+    //	  how much space to put on the heap to store them
+    AifMarkerChunkHeaderIndex = AdvancePointer(AifMarkerChunkHeaderStart, BytesRead);
+    uint16 *AifMarkerChunkHeaderNumMarkers = (uint16 *)AifMarkerChunkHeaderIndex;
+    MarkerChunkHeader->NumMarkers = FlipEndianness(*AifMarkerChunkHeaderNumMarkers);
+    BytesRead += sizeof(MarkerChunkHeader->NumMarkers);
+
+    return(BytesRead);
+}
+
+int32
+AppReadAifMarkerChunkData(uint8 *AifMarkerChunkDataStart, marker_chunk_header *MarkerChunkHeader)
+{
+    int32 BytesRead = 0;
+    
+    uint8 *AifMarkerChunkDataIndex = AifMarkerChunkDataStart;
+
+    //if there are markers in the aif file
+    if(MarkerChunkHeader->NumMarkers > 0)
     {
-	uint64 ByteToFlip = 0;
-
-	int ShiftRightAmt = i * 8;
-	ByteToFlip = (IntToFlip >> ShiftRightAmt) & (uint8) 0xFF;
+	//allocate memory for the number of markers we read in the marker chunk header
+	int32 HeapSpaceForMarkers = (sizeof(marker) * MarkerChunkHeader->NumMarkers);
+	marker MarkersOnHeap[MarkerChunkHeader->NumMarkers]; 
+	MarkersOnHeap = (marker *)HeapAlloc(HeapHandle, HEAP_ZERO_MEMORY, HeapSpaceForMarkers);
 	
-	int ShiftLeftAmt = 56 - (i * 8);
-	IntToWrite |= (ByteToFlip << ShiftLeftAmt);
+	//store the address of the markers in the marker chunk header
+	MarkerChunkHeader->Markers = Markers;
+
+	//read the marker data into structs on the heap. we have to use the heap
+	//    since the number of markers will vary by .aif file and thus
+	//    can't be known at compile time
+	for(int ThisMarker = 0; ThisMarker < MarkerChunkHeader->NumMarkers; ThisMarker++)
+	{
+	    Markers[ThisMarker] = {};
+
+	    int16 *MarkerID = (int16 *)AifMarkerChunkDataIndex;
+	    Markers[ThisMarker].ID = FlipEndianness(*MarkerID);
+	    BytesRead += sizeof(Markers[ThisMarker].ID);
+	    AifMarkerChunkDataIndex = AdvancePointer(AifMarkerChunkDataStart, BytesRead);
+
+	    uint32 *MarkerPosition = (uint32 *)AifMarkerChunkDataIndex;
+	    Markers[ThisMarker].Position = FlipEndianness(*MarkerPosition);
+	    BytesRead += sizeof(Markers[ThisMarker].Position);
+	    AifMarkerChunkDataIndex = AdvancePointer(AifMarkerChunkDataStart, BytesRead);
+
+	    // Read the length of the PString containing the Marker name.
+	    //	  Because this this is just an 8-bit unsigned int,
+	    //	  we don't need to flip the endianness.
+	    uint8 *PStringLen = (uint8 *)AifMarkerChunkDataIndex;
+	    Markers[ThisMarker].PString.StringLength = *PStringLen;
+	    BytesRead += sizeof(Markers[ThisMarker].PString.StringLength);
+	    AifMarkerChunkDataIndex = AdvancePointer(AifMarkerChunkDataStart, BytesRead);
+
+	    uint8 *PStringLetters = (uint8 *)AifMarkerChunkDataIndex;
+	    SteenCopy(PStringLetters, (uint8 *)(&Markers[ThisMarker].PString.Letters), 
+			Markers[ThisMarker].PString.StringLength);
+	    BytesRead += Markers[ThisMarker].PString.StringLength;
+
+	    uint8 WhereToPutNullChar = Markers[ThisMarker].PString.StringLength;
+	    Markers[ThisMarker].PString.Letters[WhereToPutNullChar] = '\0';
+
+	}
     }
+    return(BytesRead);
 
-    return(IntToWrite);
-    
 }
 
-void
-ReadMarkerChunkHeader(uint8 *MarkerChunkHeaderStart, marker_chunk_header *MarkerChunkHeader)
-{
-    //stop: check this function
-    //	rewrite it so that we pass in a pointer to an uninitialized
-    //	marker chunk structure and fill it out
-
-    uint8 *MarkerChunkIndex = MarkerChunkHeaderStart;
-
-    MarkerChunkHeader->Address = MarkerChunkIndex;
-    char *MarkerChunkHeaderIDStart = (char *)MarkerChunkHeader->Address;
-    ReadID(MarkerChunkHeaderIDStart, MarkerChunkHeader->ID);
-    MarkerChunkIndex += sizeof(MarkerChunkHeader->ID) - 1;
-    int32 *MarkerChunkHeaderSize = (int32 *)MarkerChunkIndex;
-    MarkerChunkHeader->Size = FlipEndianness(*MarkerChunkHeaderSize);
-    MarkerChunkIndex += sizeof(MarkerChunkHeader->Size);
-    uint16 *MarkerChunkHeaderNumMarkers = (uint16 *)MarkerChunkIndex;
-    MarkerChunkHeader->NumMarkers = FlipEndianness(*MarkerChunkHeaderNumMarkers);
-}
 
 int32 
 ProcessFillerChunk(uint8 *FillerChunkStart, filler_chunk *FillerChunk)
@@ -422,217 +654,140 @@ int WinMain(HINSTANCE Instance,
 	PSTR CmdLine, 
 	int CmdShow)
 {
-    LPCWSTR Filename = L"SC88PR~1.AIF";
-    uint8 *FileAddress;
+    LPCWSTR AifFilename = L"SC88PR~1.AIF";
+    uint8 *AifFileAddress;
 
-    HANDLE HeapHandle = GetProcessHeap();
     if(HeapHandle)
     {
-	FileAddress = (uint8 *)Win32GetFilePointer(Filename);
+	AifFileAddress = (uint8 *)Win32GetFilePointer(AifFilename);
     }
     else
     {
+	// if we somehow lost the heap handle...
 	OutputDebugStringA("failed to get process heap handle\n");
 	return(0);
     }
 
-    uint8 *FileIndex = FileAddress;
+    uint8 *AifFileIndex = AifFileAddress;
 
+    // Read form chunk
     form_chunk FormChunk = {};
+    uint8 *AifFormChunkStart = AifFileIndex;
+    int32 AifFormChunkBytesRead = AppReadAifFormChunk(AifFormChunkStart, &FormChunk);
+    AifFileIndex += AifFormChunkBytesRead;
 
-    uint8 *FormChunkStart = FileIndex;
-    FormChunk.Address = ReadAddress(FormChunkStart);
-
-    char *FormChunkIDStart = (char *)FormChunk.Address;
-    ReadID(FormChunkIDStart, FormChunk.ID);
-
-    FileIndex += sizeof(FormChunk.ID) - 1;
-    int32 *FormChunkDataSizeAddress = (int32 *)FileIndex;
-    FormChunk.DataSize = FlipEndianness(*FormChunkDataSizeAddress);
-
-    FileIndex += sizeof(FormChunk.DataSize);
-    char *FormChunkTypeStart = (char *)FileIndex;
-    ReadID(FormChunkTypeStart, FormChunk.Type);
-
-    FileIndex += sizeof(FormChunk.Type) - 1;
-    uint8 *FormChunkDataStart = FileIndex;
-    FormChunk.DataStart = ReadAddress(FormChunkDataStart);
-/* 
-    uint8 *FormChunkAddress = FileIndex;
-    FormChunk.Address = ReadAddress(FormChunkAddress);
-
-    uint8 *FormChunkIDStart = (uint8 *)FormChunk.Address;
-    ReadID(FormChunkIDStart, FormChunk.ID);
-*/
+    // Read common chunk
     common_chunk CommonChunk = {};
+    uint8 *AifCommonChunkStart = AifFileIndex;
+    int32 AifCommonChunkBytesRead = AppReadAifCommonChunk(AifCommonChunkStart, &CommonChunk);
+    AifFileIndex += AifCommonChunkBytesRead;
 
-    FileIndex = FormChunk.DataStart;
-    uint8 *CommonChunkStart = FileIndex;
-    CommonChunk.Address = ReadAddress(CommonChunkStart);
-
-    char *CommonChunkIDStart = (char *)CommonChunk.Address;
-    ReadID(CommonChunkIDStart, CommonChunk.ID);
-
-    FileIndex += sizeof(CommonChunk.ID) - 1;
-    int32 *CommonChunkDataSizeAddress = (int32 *)FileIndex;
-    CommonChunk.DataSize = FlipEndianness(*CommonChunkDataSizeAddress);
-    //per the spec, DataSize is always 18
-    Assert(CommonChunk.DataSize == 18);
-
-    FileIndex += sizeof(CommonChunk.DataSize);
-    int16 *CommonChunkNumChannels = (int16 *)FileIndex;
-    CommonChunk.NumChannels = FlipEndianness(*CommonChunkNumChannels);
-
-    FileIndex += sizeof(CommonChunk.NumChannels);
-    uint32 *CommonChunkNumSampleFrames = (uint32 *)FileIndex;
-    CommonChunk.NumSampleFrames = FlipEndianness(*CommonChunkNumSampleFrames);
-
-    FileIndex += sizeof(CommonChunk.NumSampleFrames);
-    int16 *CommonChunkSampleSize = (int16 *)FileIndex;
-    CommonChunk.SampleSize = FlipEndianness(*CommonChunkSampleSize);
-
-    FileIndex += sizeof(CommonChunk.SampleSize);
-    CommonChunk.SampleRate = GetSampleRate(FileIndex);
-
-    FileIndex += EXTENDED_WIDTH;
+    // Read marker chunk header
     marker_chunk_header MarkerChunkHeader = {};
-    ReadMarkerChunkHeader(FileIndex, &MarkerChunkHeader);
-    int32 BytesRead = ((sizeof(MarkerChunkHeader.ID ) - 1) + 
-		    sizeof(MarkerChunkHeader.Size));
-    FileIndex += BytesRead;
-    uint8 *MarkersIndex = FileIndex + sizeof(MarkerChunkHeader.NumMarkers);
-    marker *Markers = 0;
+    uint8 *AifMarkerChunkHeaderStart = AifFileIndex;
+    int32 AifMarkerChunkHeaderBytesRead = AppReadAifMarkerChunkHeader(AifMarkerChunkHeaderStart, &MarkerChunkHeader);
+    AifFileIndex += AifMarkerChunkHeaderBytesRead;
 
-    if(MarkerChunkHeader.NumMarkers != 0)
-    {
-	int32 HeapSpaceForMarkers = (sizeof(marker) * MarkerChunkHeader.NumMarkers);
-	Markers = (marker *)HeapAlloc(HeapHandle, HEAP_ZERO_MEMORY, HeapSpaceForMarkers);
-	MarkerChunkHeader.Markers = Markers;
-
-	for(int ThisMarker = 0; ThisMarker < MarkerChunkHeader.NumMarkers; ThisMarker++)
-	{
-	    Markers[ThisMarker] = {};
-	    int16 *MarkerID = (int16 *)MarkersIndex;
-	    Markers[ThisMarker].ID = FlipEndianness(*MarkerID);
-	    MarkersIndex += sizeof(Markers[ThisMarker].ID);
-	    uint32 *MarkerPosition = (uint32 *)MarkersIndex;
-	    Markers[ThisMarker].Position = FlipEndianness(*MarkerPosition);
-	    MarkersIndex += sizeof(Markers[ThisMarker].Position);
-	    uint8 *PStringLen = MarkersIndex;
-	    Markers[ThisMarker].PString.StringLength = *PStringLen;
-	    MarkersIndex += sizeof(Markers[ThisMarker].PString.StringLength);
-	    uint8 *PStringIndex = MarkersIndex;
-	    for(int i = 0; i < Markers[ThisMarker].PString.StringLength; i++)
-	    {
-		char *Letter = (char *)(PStringIndex + i);
-		Markers[ThisMarker].PString.Letters[i] = *Letter;
-		
-	    }
-	    uint8 WhereToPutNullChar = Markers[ThisMarker].PString.StringLength;
-	    Markers[ThisMarker].PString.Letters[WhereToPutNullChar] = '\0';
-	    MarkersIndex += Markers[ThisMarker].PString.StringLength;
-
-	}
-    }
-
-    FileIndex += MarkerChunkHeader.Size;
+    // Read marker chunk data
+    uint8 *AifMarkerChunkDataStart = AifFileIndex;
+    int32 AifMarkerChunkDataBytesRead = AppReadAifMarkerChunkData(AifMarkerChunkDataStart, &MarkerChunkHeader);
+    AifFileIndex += AifMarkerChunkDataBytesRead;
 
     instrument_chunk InstrumentChunk = {};
-
-    char *InstrumentChunkIDStart = (char *)FileIndex;
+    char *InstrumentChunkIDStart = (char *)AifFileIndex;
     ReadID(InstrumentChunkIDStart, InstrumentChunk.ID);
-    FileIndex += sizeof(InstrumentChunk.ID) - 1;
+    AifFileIndex += sizeof(InstrumentChunk.ID) - 1;
 
 
     /*int32 ChunkSize;*/
-    int32 *InstrumentChunkSize = (int32 *)FileIndex;
+    int32 *InstrumentChunkSize = (int32 *)AifFileIndex;
     InstrumentChunk.ChunkSize = FlipEndianness(*InstrumentChunkSize);
-    FileIndex += sizeof(InstrumentChunk.ChunkSize);
+    AifFileIndex += sizeof(InstrumentChunk.ChunkSize);
 
     /*char BaseNote;*/
-    int8 *BaseNote = (int8 *)FileIndex;
+    int8 *BaseNote = (int8 *)AifFileIndex;
     InstrumentChunk.BaseNote = *BaseNote;
     InstrumentChunk.BaseNoteDecode = MidiNoteLUT[InstrumentChunk.BaseNote];
-    FileIndex += sizeof(InstrumentChunk.BaseNote);
+    AifFileIndex += sizeof(InstrumentChunk.BaseNote);
 
     /*char Detune;*/
-    char *Detune = (char *)FileIndex;
+    char *Detune = (char *)AifFileIndex;
     InstrumentChunk.Detune = *Detune;
-    FileIndex += sizeof(InstrumentChunk.Detune);
+    AifFileIndex += sizeof(InstrumentChunk.Detune);
 
     /*char LowNote;*/
-    char *LowNote = (char *)FileIndex;
+    char *LowNote = (char *)AifFileIndex;
     InstrumentChunk.LowNote = *LowNote;
     InstrumentChunk.LowNoteDecode = MidiNoteLUT[InstrumentChunk.LowNote];
-    FileIndex += sizeof(InstrumentChunk.LowNote);
+    AifFileIndex += sizeof(InstrumentChunk.LowNote);
 
     /*char HighNote;*/
-    char *HighNote = (char *)FileIndex;
+    char *HighNote = (char *)AifFileIndex;
     InstrumentChunk.HighNote = *HighNote;
     InstrumentChunk.HighNoteDecode = MidiNoteLUT[InstrumentChunk.HighNote];
-    FileIndex += sizeof(InstrumentChunk.HighNote);
+    AifFileIndex += sizeof(InstrumentChunk.HighNote);
 
     /*char LowVelocity;*/
-    char *LowVelocity = (char *)FileIndex;
+    char *LowVelocity = (char *)AifFileIndex;
     InstrumentChunk.LowVelocity = *LowVelocity;
-    FileIndex += sizeof(InstrumentChunk.LowVelocity);
+    AifFileIndex += sizeof(InstrumentChunk.LowVelocity);
 
     /*char HighVelocity;*/
-    char *HighVelocity = (char *)FileIndex;
+    char *HighVelocity = (char *)AifFileIndex;
     InstrumentChunk.HighVelocity = *HighVelocity;
-    FileIndex += sizeof(InstrumentChunk.HighVelocity);
+    AifFileIndex += sizeof(InstrumentChunk.HighVelocity);
 
     /*int16 Gain;*/
-    int16 *Gain = (int16 *)FileIndex;
+    int16 *Gain = (int16 *)AifFileIndex;
     InstrumentChunk.Gain = FlipEndianness(*Gain);
-    FileIndex += sizeof(InstrumentChunk.Gain);
+    AifFileIndex += sizeof(InstrumentChunk.Gain);
 
     /*loop *SustainLoop;*/
-    int16 *SustainLoopPlayMode = (int16 *)FileIndex;
+    int16 *SustainLoopPlayMode = (int16 *)AifFileIndex;
     InstrumentChunk.SustainLoop.PlayMode = FlipEndianness(*SustainLoopPlayMode);
-    FileIndex += sizeof(InstrumentChunk.SustainLoop.PlayMode);
-    int16 *SustainLoopBeginLoopMarker = (int16 *)FileIndex;
+    AifFileIndex += sizeof(InstrumentChunk.SustainLoop.PlayMode);
+    int16 *SustainLoopBeginLoopMarker = (int16 *)AifFileIndex;
     InstrumentChunk.SustainLoop.BeginLoopMarker = FlipEndianness(*SustainLoopBeginLoopMarker);
-    FileIndex += sizeof(InstrumentChunk.SustainLoop.BeginLoopMarker);
-    int16 *SustainLoopEndLoopMarker = (int16 *)FileIndex;
+    AifFileIndex += sizeof(InstrumentChunk.SustainLoop.BeginLoopMarker);
+    int16 *SustainLoopEndLoopMarker = (int16 *)AifFileIndex;
     InstrumentChunk.SustainLoop.EndLoopMarker = FlipEndianness(*SustainLoopEndLoopMarker);
-    FileIndex += sizeof(InstrumentChunk.SustainLoop.EndLoopMarker);
+    AifFileIndex += sizeof(InstrumentChunk.SustainLoop.EndLoopMarker);
 
     /*loop *ReleaseLoop;*/
-    int16 *ReleaseLoopPlayMode = (int16 *)FileIndex;
+    int16 *ReleaseLoopPlayMode = (int16 *)AifFileIndex;
     InstrumentChunk.ReleaseLoop.PlayMode = FlipEndianness(*ReleaseLoopPlayMode);
-    FileIndex += sizeof(InstrumentChunk.ReleaseLoop.PlayMode);
-    int16 *ReleaseLoopBeginLoopMarker = (int16 *)FileIndex;
+    AifFileIndex += sizeof(InstrumentChunk.ReleaseLoop.PlayMode);
+    int16 *ReleaseLoopBeginLoopMarker = (int16 *)AifFileIndex;
     InstrumentChunk.ReleaseLoop.BeginLoopMarker = FlipEndianness(*ReleaseLoopBeginLoopMarker);
-    FileIndex += sizeof(InstrumentChunk.ReleaseLoop.BeginLoopMarker);
-    int16 *ReleaseLoopEndLoopMarker = (int16 *)FileIndex;
+    AifFileIndex += sizeof(InstrumentChunk.ReleaseLoop.BeginLoopMarker);
+    int16 *ReleaseLoopEndLoopMarker = (int16 *)AifFileIndex;
     InstrumentChunk.ReleaseLoop.EndLoopMarker = FlipEndianness(*ReleaseLoopEndLoopMarker);
-    FileIndex += sizeof(InstrumentChunk.ReleaseLoop.EndLoopMarker);
+    AifFileIndex += sizeof(InstrumentChunk.ReleaseLoop.EndLoopMarker);
 
     filler_chunk FillerChunk = {};
-    int32 BytesReadInFillerChunk = ProcessFillerChunk(FileIndex, &FillerChunk);
+    int32 BytesReadInFillerChunk = ProcessFillerChunk(AifFileIndex, &FillerChunk);
 
-    FileIndex += BytesReadInFillerChunk;
-    FileIndex += FillerChunk.NumFillerBytes;
+    AifFileIndex += BytesReadInFillerChunk;
+    AifFileIndex += FillerChunk.NumFillerBytes;
 
     //we may have just skipped thousands of bytes so assert
     //we aren't off in no man's land
-    Assert(*FileIndex != 0);
+    Assert(*AifFileIndex != 0);
 
     sound_data_chunk_header SoundDataChunkHeader = {};
-    ProcessSoundDataChunkHeader(FileIndex, &SoundDataChunkHeader);
-    FileIndex = SoundDataChunkHeader.DataStart;
-    int32 BytesPerSample = CommonChunk.SampleSize / BITS_IN_BYTE;
-    int32 BytesNeededForFlippedSamples = (CommonChunk.NumSampleFrames * 
+    ProcessSoundDataChunkHeader(AifFileIndex, &SoundDataChunkHeader);
+    AifFileIndex = SoundDataChunkHeader.DataStart;
+    int32 CommonChunkBytesPerSample = (CommonChunk.SampleSize / BITS_IN_BYTE);
+    int32 FlippedSamplesByteCount = (CommonChunk.NumSampleFrames * 
 					CommonChunk.NumChannels * 
-					BytesPerSample);
+					CommonChunkBytesPerSample);
 
     uint8 *FlippedSamplesStart = (uint8 *)HeapAlloc(HeapHandle, 
 						HEAP_ZERO_MEMORY, 
-						BytesNeededForFlippedSamples);
+						FlippedSamplesByteCount);
     uint8 *SamplesToFlipStart = SoundDataChunkHeader.DataStart;
     
-    int BytesInSampleFrame = BytesPerSample * CommonChunk.NumChannels;
+    int BytesInSampleFrame = CommonChunkBytesPerSample * CommonChunk.NumChannels;
     int HowManyBytesToFlip = BytesInSampleFrame * CommonChunk.NumSampleFrames;
     int SampleBytesWritten = 0;
     int SampleBytesRead = 0;
@@ -645,7 +800,7 @@ int WinMain(HINSTANCE Instance,
 		Channel < CommonChunk.NumChannels;
 		Channel++)
 	{
-	    int SampleFrameOffset = Channel * BytesPerSample;
+	    int SampleFrameOffset = Channel * CommonChunkBytesPerSample;
 
 	    uint8 FirstByteOfSamplePoint = SamplesToFlipStart[SampleFrame + SampleFrameOffset];
 	    SampleBytesRead++;
@@ -663,10 +818,151 @@ int WinMain(HINSTANCE Instance,
 	}
 
     }
-    
-    HeapFree(HeapHandle, 0, Markers);
-    HeapFree(HeapHandle, 0, FlippedSamplesStart);
+    char RiffType[ID_WIDTH];        // "WAVE" 4
+				    
+    // Format chunk
+    char FormatChunkID[ID_WIDTH];   // "fmt " 4
+    uint32 FormatChunkDataSize;// 16 for PCM 4
+    uint16 FormatTag;  // 1 = PCM 2
+    uint16 NumChannels;  // 2
+    uint32 SampleRate;   // 4
+    uint32 AvgBytesPerSec;     // sampleRate × numChannels × bitsPerSample/8 (4)
+    uint16 BlockAlign;   // numChannels × bitsPerSample/8 (2)
+    uint16 BitsPerSample;  
 
+    // Data chunk
+    char DataChunkID[ID_WIDTH]; // "data"
+
+     /******************************
+     * wav file size calculation, bytes:
+     *	  	  
+     *	  Riff chunk:
+     *	    RiffType, 4
+     *
+     *	  Format chunk:
+     *	    FormatChunkID, 4    
+     *      FormatChunkDataSize, 4
+     *      FormatTag, 2
+     *	    NumChannels, 2                                                       
+     *	    SampleRate, 4
+     *	    AvgBytesPerSec, 4
+     *	    BlockAlign, 2
+     *	    BitsPerSample, 2  
+     *
+     *	  Data chunk:
+     *	    DataChunkID, 4
+     *	    DataChunkDataSize, (FlippedSamplesByteCount)
+     *	  
+     ******************************/
+
+    wav_header WavHeader = {};
+    SteenCopy((uint8 *)"RIFF", (uint8 *)WavHeader.GroupID, ID_WIDTH);
+    SteenCopy((uint8 *)"WAVE", (uint8 *)WavHeader.RiffType, ID_WIDTH);
+    SteenCopy((uint8 *)"fmt ", (uint8 *)WavHeader.FormatChunkID, ID_WIDTH);
+    SteenCopy((uint8 *)"data", (uint8 *)WavHeader.DataChunkID, ID_WIDTH);
+    WavHeader.WavFileSize = HEADER_SIZE_FOR_FILE_SIZE_CALC + FlippedSamplesByteCount;
+    WavHeader.NumChannels = CommonChunk.NumChannels;
+    WavHeader.SampleRate = CommonChunk.SampleRate;
+    WavHeader.BitsPerSample = CommonChunk.SampleSize;
+
+    uint32 WavHeaderBytesPerSample = (WavHeader.BitsPerSample / BITS_IN_BYTE); // for convenience!
+    WavHeader.AvgBytesPerSec = WavHeader.SampleRate * 
+				WavHeader.NumChannels * 
+				WavHeaderBytesPerSample;
+				
+    WavHeader.BlockAlign = WavHeader.NumChannels * WavHeaderBytesPerSample;
+    WavHeader.DataChunkDataSize = CommonChunk.NumSampleFrames * 
+				    WavHeader.NumChannels * 
+				    WavHeaderBytesPerSample;
+    Assert(WavHeader.DataChunkDataSize == FlippedSamplesByteCount);
+
+    bool32 HeaderWriteResult = false;  
+    LPCWSTR WavFileName = L"WAVTEST.WAV";
+    HANDLE WavFileHandle = CreateFileW(WavFileName, //lpFilename
+					(FILE_GENERIC_READ | FILE_APPEND_DATA), //dwDesiredAccess
+					(FILE_SHARE_READ | FILE_SHARE_WRITE), //dwShareMode
+					0, //lpSecurityAttributes
+					CREATE_ALWAYS, //dwCreationDisposition
+					0, //dwFlagsAndAttributes
+					0); //htemplate file
+
+    if(WavFileHandle != INVALID_HANDLE_VALUE)
+    {
+	DWORD HeaderBytesWritten;
+	HeaderWriteResult = WriteFile(WavFileHandle, &WavHeader, 44, &HeaderBytesWritten, 0); // write the header
+	if(HeaderWriteResult)
+	{
+	    bool32 SamplesWriteResult = false;
+	    DWORD SampleBytesWritten;
+	    SamplesWriteResult = WriteFile(WavFileHandle, FlippedSamplesStart, 
+		    WavHeader.DataChunkDataSize, &SampleBytesWritten, 0);
+	    DWORD LastError = GetLastError();
+	    if(!SamplesWriteResult)
+	    {
+		OutputDebugStringA("failed to write samples\n");
+	    }
+	}
+	else
+	{
+	    OutputDebugStringA("failed to write wav file header\n");
+	}
+    }
+    else
+    {
+	OutputDebugStringA("failed to create wav file\n");
+    }
+    DWORD LastError = GetLastError();
+
+    LARGE_INTEGER WavFileSize;
+    LPVOID WavFileVoid;
+    GetFileSizeEx(WavFileHandle, &WavFileSize);
+    if(WavFileSize.QuadPart)
+    {
+	Assert(WavFileSize.QuadPart <= 0xFFFFFFFF);
+
+	if(HeapHandle)
+	{
+	    WavFileVoid = HeapAlloc(HeapHandle, HEAP_ZERO_MEMORY, WavFileSize.QuadPart);
+	    if(WavFileVoid)
+	    {
+		DWORD NumBytesRead;
+		BOOL FileReadSuccessfully = false;
+		FileReadSuccessfully = ReadFile(WavFileHandle, WavFileVoid, WavFileSize.QuadPart, &NumBytesRead, 0);
+		if(!FileReadSuccessfully)
+		{
+		    OutputDebugStringA("failed to read wav file\n");
+		    LastError = GetLastError();
+
+		    //free if we failed to read the file
+		    HeapFree(HeapHandle, 0, WavFileVoid);
+		}
+	    }
+	    else
+	    {
+		OutputDebugStringA("failed to allocate memory\n");
+	    }
+	}
+	else
+	{
+	    OutputDebugStringA("Could not reference HeapHandle when attempting\nto allocate memory for wav file\n");
+	}
+    }
+    else
+    {
+	OutputDebugStringA("failed to get .aif file size\n");
+    }
+    
+    uint8 *WavFileAddress = (uint8 *)WavFileVoid;
+
+    
+
+
+
+
+
+    CloseHandle(WavFileHandle);
+    HeapFree(HeapHandle, 0, (uint8 *)MarkerChunkHeader.Markers);
+    HeapFree(HeapHandle, 0, FlippedSamplesStart);
 
 #if 0
     uint8_t FortyEightKSampleRate[10] = {
