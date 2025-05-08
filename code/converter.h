@@ -4,6 +4,7 @@
 
 #define Assert(Value) if(!(Value)) {*(int *)0 = 0;}
 #define ArrayCount(Array) ( (sizeof(Array)) / (sizeof(Array[0])) )
+#define Stringize(Variable) #Variable
 
 /*
  * The aif spec: https://www.mmsp.ece.mcgill.ca/Documents/AudioFormats/AIFF/AIFF.html 
@@ -54,34 +55,31 @@ struct common_chunk
     uint32 SampleRate;
 };
 
-struct pstring
-{
-    //todo: assert that the count is even
-    //	per the spec, all pstring counts must be even
-    //	(not including pad bytes)
-    //
-    //note: when writing to wav, do not store the entire buffer
-    //	only store the number of characters in Count
-    uint8 StringLength;
-    char Letters[MAX_STRING_LEN];
-};
-
+// This struct never actually needs to be delcared
+//    but leaving it in for now for reference
 struct marker
 {
     int16 ID;
-    // todo: assert that ID is a positive, nonzero int
     uint32 Position;
-    pstring PString;
+    uint8 MarkerNameLen;
+    //struct hack
+    char MarkerName[];
 };
+
+// macro that represents the size of the first two items of a marker
+//    struct. we use this later in computing the amount of memory
+//    required to store the marker data we read from the .aif file
+#define MARKER_BOILERPLATE (offsetof(marker, MarkerNameLen))
 
 struct marker_chunk_header
 {
     char ID[ID_WIDTH + 1];
     uint8 *Address;
     int32 Size;
-    uint16 NumMarkers;
-    marker *Markers;
+    uint16 TotalMarkers;
+    uint8 *Markers;
 };
+
 
 struct loop
 {
@@ -92,6 +90,7 @@ struct loop
 
 struct instrument_chunk
 {
+    uint8 *Address;
     char ID[ID_WIDTH + 1];
     int32 ChunkSize;
     int8 BaseNote;
@@ -108,7 +107,7 @@ struct instrument_chunk
     loop ReleaseLoop;
 };
 
-struct filler_chunk
+struct filler_chunk_header
 {
     // this appears in aif files but is not documented in the aif spec.
     // For some reason.
@@ -117,7 +116,7 @@ struct filler_chunk
     // number of filler bytes? Although, elsehwere in the spec, plenty of examples
     // of signed ints used for values that would never be negative.
     char ID[ID_WIDTH + 1];
-    uint32 NumFillerBytes;
+    uint32 TotalFillerBytes;
 
 };
 
