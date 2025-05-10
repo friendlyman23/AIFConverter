@@ -31,7 +31,7 @@
 !_TAG_OUTPUT_VERSION	0.0	/current.age/
 !_TAG_PARSER_VERSION!C++	1.1	/current.age/
 !_TAG_PATTERN_LENGTH_LIMIT	96	/0 for no limit/
-!_TAG_PROC_CWD	w:/converter/code/	//
+!_TAG_PROC_CWD	W:/converter/code/	//
 !_TAG_PROGRAM_AUTHOR	Universal Ctags Team	//
 !_TAG_PROGRAM_NAME	Universal Ctags	/Derived from Exuberant Ctags/
 !_TAG_PROGRAM_URL	https://ctags.io/	/official site/
@@ -49,14 +49,14 @@ Address	./converter.h	/^    uint8 *Address;$/;"	m	struct:form_chunk	typeref:type
 Address	./converter.h	/^    uint8 *Address;$/;"	m	struct:instrument_chunk	typeref:typename:uint8 *
 Address	./converter.h	/^    uint8 *Address;$/;"	m	struct:marker_chunk_header	typeref:typename:uint8 *
 AdvancePointer	./win32_converter.cpp	/^AdvancePointer(uint8 *StartingByte, int32 BytesRead)$/;"	f	typeref:typename:uint8 *
-App_GetBytesNeededToStoreMarkers	./win32_converter.cpp	/^App_GetBytesNeededToStoreMarkers(uint8 *Aif_MarkersIndex, int32 TotalMarkers)$/;"	f	typeref:typename:int
-App_Parse_Aif_CommonChunk	./win32_converter.cpp	/^App_Parse_Aif_CommonChunk(uint8 *Aif_CommonChunk_Start, common_chunk *CommonChunk)$/;"	f	typeref:typename:int
-App_Parse_Aif_FormChunk	./win32_converter.cpp	/^App_Parse_Aif_FormChunk(uint8 *Aif_FormChunk_Start, form_chunk *FormChunk)$/;"	f	typeref:typename:int
-App_Parse_Aif_InstrumentChunk	./win32_converter.cpp	/^App_Parse_Aif_InstrumentChunk(uint8 *Aif_InstrumentChunk_DataStart, instrument_chunk *Instrument/;"	f	typeref:typename:int
-App_Parse_Aif_MarkerChunk_Data	./win32_converter.cpp	/^App_Parse_Aif_MarkerChunk_Data(uint8 *Aif_MarkerChunk_DataStart, $/;"	f	typeref:typename:int32
-App_Parse_Aif_MarkerChunk_Header	./win32_converter.cpp	/^App_Parse_Aif_MarkerChunk_Header(uint8 *Aif_MarkerChunk_HeaderStart, marker_chunk_header *Marker/;"	f	typeref:typename:int
-App_Parse_FillerChunk_Header	./win32_converter.cpp	/^App_Parse_FillerChunk_Header(uint8 *Aif_FillerChunk_HeaderStart, filler_chunk_header *FillerChun/;"	f	typeref:typename:int
-App_Parse_SoundData_Header	./win32_converter.cpp	/^App_Parse_SoundData_Header(uint8 *SoundDataChunk_HeaderStart, sound_data_chunk_header *SoundData/;"	f	typeref:typename:void
+App_Parse_Aif_Chunk	./win32_converter.cpp	/^App_Parse_Aif_Chunk(uint8 *Aif_CommonChunk_Start, common_chunk *CommonChunk)$/;"	f	typeref:typename:int
+App_Parse_Aif_Chunk	./win32_converter.cpp	/^App_Parse_Aif_Chunk(uint8 *Aif_FillerChunk_Header_Start, filler_chunk_header *FillerChunk_Header/;"	f	typeref:typename:int
+App_Parse_Aif_Chunk	./win32_converter.cpp	/^App_Parse_Aif_Chunk(uint8 *Aif_FormChunk_Start, form_chunk *FormChunk)$/;"	f	typeref:typename:int
+App_Parse_Aif_Chunk	./win32_converter.cpp	/^App_Parse_Aif_Chunk(uint8 *Aif_Index, int32 TotalMarkers)$/;"	f	typeref:typename:int
+App_Parse_Aif_Chunk	./win32_converter.cpp	/^App_Parse_Aif_Chunk(uint8 *Aif_InstrumentChunk_DataStart, instrument_chunk *InstrumentChunk)$/;"	f	typeref:typename:int
+App_Parse_Aif_Chunk	./win32_converter.cpp	/^App_Parse_Aif_Chunk(uint8 *Aif_MarkerChunk_DataStart, $/;"	f	typeref:typename:int32
+App_Parse_Aif_Chunk	./win32_converter.cpp	/^App_Parse_Aif_Chunk(uint8 *Aif_MarkerChunk_HeaderStart, marker_chunk_header *MarkerChunk_Header)$/;"	f	typeref:typename:int
+App_Parse_Aif_Chunk	./win32_converter.cpp	/^App_Parse_Aif_Chunk(uint8 *Aif_SoundDataChunk_Header_Start, sound_data_chunk_header *SoundDataCh/;"	f	typeref:typename:int
 AreIDsTheSame	./win32_converter.cpp	/^AreIDsTheSame(char *IDToCheck, char *IDToCheckAgainst)$/;"	f	typeref:typename:bool32
 AreIntsTheSame	./win32_converter.cpp	/^AreIntsTheSame(int IntToCheck, int IntToCheckAgainst)$/;"	f	typeref:typename:bool32
 ArrayCount	./converter.h	/^#define ArrayCount(/;"	d
@@ -89,6 +89,8 @@ FlipEndianness	./win32_converter.cpp	/^FlipEndianness(int16 IntToFlip)$/;"	f	typ
 FlipEndianness	./win32_converter.cpp	/^FlipEndianness(int32 IntToFlip)$/;"	f	typeref:typename:int32
 FlipEndianness	./win32_converter.cpp	/^FlipEndianness(uint16 IntToFlip)$/;"	f	typeref:typename:uint16
 FlipEndianness	./win32_converter.cpp	/^FlipEndianness(uint32 IntToFlip)$/;"	f	typeref:typename:uint32
+FlipSampleEndianness16Bits	./win32_converter.cpp	/^FlipSampleEndianness16Bits(common_chunk *CommonChunk, uint8 *LittleEndianSamplesStart, $/;"	f	typeref:typename:int
+FlipSampleEndianness24Bits	./win32_converter.cpp	/^FlipSampleEndianness24Bits(common_chunk *CommonChunk, uint8 *LittleEndianSamplesStart, $/;"	f	typeref:typename:int
 FormatChunkDataSize	./converter.h	/^    uint32 FormatChunkDataSize = WAV_FORMAT_CHUNK_DATA_SIZE;$/;"	m	struct:wav_header	typeref:typename:uint32
 FormatChunkID	./converter.h	/^    char FormatChunkID[ID_WIDTH];   \/\/ "fmt " 4$/;"	m	struct:wav_header	typeref:typename:char[]
 FormatTag	./converter.h	/^    uint16 FormatTag = WAV_UNCOMPRESSED_PCM_FORMAT_TAG;$/;"	m	struct:wav_header	typeref:typename:uint16
