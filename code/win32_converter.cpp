@@ -1,27 +1,11 @@
 #include <windows.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <math.h>
 #include <limits.h>
-
-typedef int8_t int8;
-typedef int16_t int16;
-typedef int32_t int32;
-typedef int64_t int64;
-typedef int32 bool32;
-
-typedef uint8_t uint8;
-typedef uint16_t uint16;
-typedef uint32_t uint32;
-typedef uint64_t uint64;
-
-typedef uint8_t uint8;
-typedef uint16_t uint16;
-typedef uint32_t uint32;
-typedef uint64_t uint64;
+#include "converter.h"
+#include "GPerfHash.c"
 
 static HANDLE HeapHandle = GetProcessHeap();
-
 
 /* TODO:
  *    1. For chunk types that should only appear once in a file, assert one doesn't already exist
@@ -39,9 +23,14 @@ static HANDLE HeapHandle = GetProcessHeap();
  *		  - Author chunk
  *		  - Copyright chunk
  *
+ *	  Chunk types that must appear:
+ *
+ *	      - Common chunk
+ *	      - Sound Data chunk, IF sampled sound > 0
+ *    
  *    2. Use Windows data types in the platform layer
  *
- *    3. unify terminology in struct fields e.g. "DataSize" vs. "Chunk_Size"
+ *    3. unify terminology in struct fields e.g. "ChunkSize" vs. "Chunk_Size"
  *
  *    4. test InstrumentChunk loop parsers with nonzero data
  *    
@@ -58,10 +47,9 @@ static HANDLE HeapHandle = GetProcessHeap();
  *    9. Check the Marker function to see if I completely wasted my time. cool
  *
  *    10. Update all OutputDebugString calls to use the error-reporting functions
+ *
+ *    11. 
  */
-
-
-#include "converter.h"
 
 void
 DebugPrintInt(int i)
@@ -470,6 +458,7 @@ GetSampleRate(uint8 *FirstByteOfExtendedPrecisionFloat)
 //    other "App_Parse_Aif_Chunk" functions are not because they 
 //    generally follow the patttern established here.
 
+
 int
 App_Parse_Aif_Chunk(uint8 *Aif_FormChunk_Start, form_chunk *FormChunk)
 {
@@ -513,23 +502,23 @@ App_Parse_Aif_Chunk(uint8 *Aif_FormChunk_Start, form_chunk *FormChunk)
     Aif_Index = AdvancePointer(Aif_FormChunk_Start, BytesRead);
 
     // and we keep doing this until we've finished parsing the chunk!
-    int32 *Aif_FormChunk_DataSizeAddress = (int32 *)Aif_Index;
-    FormChunk->DataSize = FlipEndianness(*Aif_FormChunk_DataSizeAddress);
-    BytesRead += sizeof(FormChunk->DataSize);
+    int32 *Aif_FormChunk_ChunkSizeAddress = (int32 *)Aif_Index;
+    FormChunk->ChunkSize = FlipEndianness(*Aif_FormChunk_ChunkSizeAddress);
+    BytesRead += sizeof(FormChunk->ChunkSize);
 
     Aif_Index = AdvancePointer(Aif_FormChunk_Start, BytesRead);
-    char *Aif_FormChunk_TypeStart = (char *)Aif_Index;
-    ReadID(Aif_FormChunk_TypeStart, (char *)(FormChunk->Type));
+    char *Aif_FormChunk_FormType_Start = (char *)Aif_Index;
+    ReadID(Aif_FormChunk_FormType_Start, (char *)(FormChunk->FormType));
 
     // Per .aif spec, Form Chunk Type is always "AIFF"
-    ValidateID(FormChunk->Type, "AIFF", __func__);
+    ValidateID(FormChunk->FormType, "AIFF", __func__);
     BytesRead += ID_WIDTH;
 
     // The "data" of the Form Chunk is everything else
     //	  in the entire aif file.
     Aif_Index = AdvancePointer(Aif_FormChunk_Start, BytesRead);
     uint8 *Aif_FormChunk_DataStart = Aif_Index;
-    FormChunk->DataStart = CopyAddress(Aif_FormChunk_DataStart);
+    FormChunk->SubChunksStart;
 
     return(BytesRead);
 }
@@ -559,11 +548,11 @@ App_Parse_Aif_Chunk(uint8 *Aif_CommonChunk_Start, common_chunk *CommonChunk)
 
     // Store the size of the Common Chunk
     Aif_Index = AdvancePointer(Aif_CommonChunk_Start, BytesRead);
-    int32 *Aif_CommonChunk_DataSizeAddress = (int32 *)Aif_Index;
-    CommonChunk->DataSize = FlipEndianness(*Aif_CommonChunk_DataSizeAddress);
-    // per the spec, DataSize is always 18
-    ValidateInteger(CommonChunk->DataSize, 18, __func__);
-    BytesRead += sizeof(CommonChunk->DataSize);
+    int32 *Aif_CommonChunk_ChunkSizeAddress = (int32 *)Aif_Index;
+    CommonChunk->ChunkSize = FlipEndianness(*Aif_CommonChunk_ChunkSizeAddress);
+    // per the spec, ChunkSize is always 18
+    ValidateInteger(CommonChunk->ChunkSize, 18, __func__);
+    BytesRead += sizeof(CommonChunk->ChunkSize);
 
     // Store the number of audio channels
     Aif_Index = AdvancePointer(Aif_CommonChunk_Start, BytesRead);
@@ -923,7 +912,7 @@ App_Parse_Aif_Chunk(uint8 *Aif_SoundDataChunk_Header_Start, sound_data_chunk_hea
     BytesRead += sizeof(SoundDataChunk_Header->BlockSize);
 
     Aif_Index = AdvancePointer(Aif_SoundDataChunk_Header_Start, BytesRead);
-    SoundDataChunk_Header->DataStart = Aif_Index;
+    SoundDataChunk_Header->SamplesStart = Aif_Index;
 
     return(BytesRead);
 }
@@ -1027,6 +1016,7 @@ FlipSampleEndianness24Bits(common_chunk *CommonChunk, uint8 *LittleEndianSamples
     return(BytesWritten);
 }
 
+
 int WinMain(HINSTANCE Instance, 
         HINSTANCE PrevInstance, 
         PSTR CmdLine, 
@@ -1034,6 +1024,20 @@ int WinMain(HINSTANCE Instance,
 {
     LPCWSTR Aif_Filename = L"SC88PR~1.AIF";
     uint8 *Aif_FileStart;
+
+    // Form chunk
+    // Common chunk		    Highest precedence
+    // Sound Data chunk
+    // Marker chunk
+    // Instrument chunk
+    // Comment chunk
+    // Name chunk
+    // Author chunk
+    // Copyright chunk
+    // Annotation chunk
+    // Audio Recording chunk
+    // MIDI Data chunk
+    // Application Specific chunk   Lowest precedence
 
     if(HeapHandle)
     {
@@ -1049,12 +1053,28 @@ int WinMain(HINSTANCE Instance,
     uint64 Aif_FileBytesRead = 0;
     uint8 *Aif_FileIndex = Aif_FileStart;
 
+    char *ChunkIDs[13] =
+    {
+	"FORM", "COMM", "SSND", "MARK", "INST", "COMT", "NAME", "AUTH", 
+	"(c) ", "ANNO", "AESD", "MIDI", "APPL"
+    };
+
     // Read Form chunk
     form_chunk FormChunk = {};
     uint8 *Aif_FormChunk_Start = (uint8 *)Aif_FileIndex;
     int Aif_FormChunk_BytesRead = App_Parse_Aif_Chunk(Aif_FormChunk_Start, &FormChunk);
     Aif_FileBytesRead += Aif_FormChunk_BytesRead;
 
+    // Loop to match the next chunk ID to its parsing function
+	/*   while(App_LookUpChunkID() == CHUNK_FOUND)*/
+	/*   {*/
+	/*switch(Aif_ChunkID)*/
+	/*{*/
+	/*    case */
+	/*}*/
+	/**/
+	/**/
+	/**/
     // Read Common chunk
     Aif_FileIndex = AdvancePointer(Aif_FileStart, Aif_FileBytesRead);
     common_chunk CommonChunk = {};
@@ -1126,7 +1146,7 @@ int WinMain(HINSTANCE Instance,
     uint8 *LittleEndianSamplesStart = 
 		    (uint8 *)Win32_AllocateMemory(LittleEndianSamplesMemorySize, __func__);
     // Declare a pointer to the big endian samples
-    uint8 *BigEndianSamplesStart = SoundDataChunk_Header.DataStart;
+    uint8 *BigEndianSamplesStart = SoundDataChunk_Header.SamplesStart;
 
     /**********************************************************
      *                                                        *
@@ -1189,7 +1209,7 @@ int WinMain(HINSTANCE Instance,
      *
      *	  Format chunk:
      *	    FormatChunk_ID, 4    
-     *      FormatChunk_DataSize, 4
+     *      FormatChunk_ChunkSize, 4
      *      FormatTag, 2
      *	    NumChannels, 2                                                       
      *	    SampleRate, 4
@@ -1199,7 +1219,7 @@ int WinMain(HINSTANCE Instance,
      *
      *	  Data chunk:
      *	    DataChunk_ID, 4
-     *	    DataChunk_DataSize, (FlippedSamplesByteCount)
+     *	    DataChunk_ChunkSize, (FlippedSamplesByteCount)
      *	  
      ******************************/
 
@@ -1219,10 +1239,10 @@ int WinMain(HINSTANCE Instance,
         WavHeaderBytesPerSample;
 
     WavHeader.BlockAlign = WavHeader.NumChannels * WavHeaderBytesPerSample;
-    WavHeader.DataChunkDataSize = CommonChunk.NumSampleFrames * 
+    WavHeader.DataChunk_ChunkSize = CommonChunk.NumSampleFrames * 
         WavHeader.NumChannels * 
         WavHeaderBytesPerSample;
-    Assert(WavHeader.DataChunkDataSize == LittleEndianBytesWritten);
+    Assert(WavHeader.DataChunk_ChunkSize == LittleEndianBytesWritten);
 
     bool32 HeaderWriteResult = false;  
     LPCWSTR WavFileName = L"WAVTEST.WAV";
@@ -1243,7 +1263,7 @@ int WinMain(HINSTANCE Instance,
             bool32 SamplesWriteResult = false;
             DWORD SampleBytesWritten;
             SamplesWriteResult = WriteFile(WavFileHandle, LittleEndianSamplesStart, 
-                    WavHeader.DataChunkDataSize, &SampleBytesWritten, 0);
+                    WavHeader.DataChunk_ChunkSize, &SampleBytesWritten, 0);
             DWORD LastError = GetLastError();
             if(!SamplesWriteResult)
             {

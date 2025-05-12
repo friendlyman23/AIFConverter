@@ -1,6 +1,23 @@
 #if !defined (CONVERTER_H)
 
 #include <stddef.h>
+#include <stdint.h>
+
+typedef int8_t int8;
+typedef int16_t int16;
+typedef int32_t int32;
+typedef int64_t int64;
+typedef int32 bool32;
+
+typedef uint8_t uint8;
+typedef uint16_t uint16;
+typedef uint32_t uint32;
+typedef uint64_t uint64;
+
+typedef uint8_t uint8;
+typedef uint16_t uint16;
+typedef uint32_t uint32;
+typedef uint64_t uint64;
 
 #define Assert(Value) if(!(Value)) {*(int *)0 = 0;}
 #define ArrayCount(Array) ( (sizeof(Array)) / (sizeof(Array[0])) )
@@ -39,16 +56,16 @@ struct form_chunk
 {
     uint8 *Address;
     char ID[ID_WIDTH + 1];
-    int32 DataSize;
-    char Type[ID_WIDTH + 1];
-    uint8 *DataStart;
+    int32 ChunkSize;
+    char FormType[ID_WIDTH + 1];
+    uint8 *SubChunksStart;
 };
 
 struct common_chunk
 {
     uint8 *Address;
     char ID[ID_WIDTH + 1];
-    int32 DataSize;
+    int32 ChunkSize;
     int16 NumChannels;
     uint32 NumSampleFrames;
     int16 SampleSize;
@@ -126,7 +143,7 @@ struct sound_data_chunk_header
     int32 ChunkSize;
     uint32 Offset;
     uint32 BlockSize;
-    uint8 *DataStart;
+    uint8 *SamplesStart;
 };
 
 
@@ -169,7 +186,7 @@ struct wav_header {
 				    
     // Format chunk
     char FormatChunkID[ID_WIDTH];   // "fmt " 4
-    uint32 FormatChunkDataSize = WAV_FORMAT_CHUNK_DATA_SIZE;
+    uint32 FormatChunk_ChunkSize = WAV_FORMAT_CHUNK_DATA_SIZE;
     uint16 FormatTag = WAV_UNCOMPRESSED_PCM_FORMAT_TAG;
     uint16 NumChannels;
     uint32 SampleRate;
@@ -179,7 +196,7 @@ struct wav_header {
 
     // Data chunk
     char DataChunkID[ID_WIDTH]; // "data"
-    uint32 DataChunkDataSize;// numSamples × numChannels × bitsPerSample/8 (4)
+    uint32 DataChunk_ChunkSize;// numSamples × numChannels × bitsPerSample/8 (4)
 };
 #pragma pack(pop)
 
@@ -210,7 +227,6 @@ char *MidiNoteLUT[128] =
     /*108 - 119 */  "C7",   "C#7",  "D7",   "D#7",  "E7",   "F7",   "F#7",  "G7",   "G#7",  "A7",   "A#7",  "B7",
     /*120 - 127 */  "C8",   "C#8",  "D8",   "D#8",  "E8",   "F8",   "F#8",  "G8"
 };
-
 
 
 #define CONVERTER_H
