@@ -30,7 +30,7 @@
 #endif
 
 
-#define TOTAL_KEYWORDS 13
+#define TOTAL_KEYWORDS 14
 #define MIN_WORD_LENGTH 4
 #define MAX_WORD_LENGTH 4
 #define MIN_HASH_VALUE 0
@@ -53,12 +53,12 @@ GPerfHasher (register const char *str, register size_t len)
       31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
       31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
       31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
-      31, 31,  4, 31, 31, 31, 31, 31, 31, 31,
+      31, 31,  9, 31, 31, 31, 31, 31, 31, 31,
        4, 31, 31, 31, 31, 31, 31, 31, 31, 31,
       31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
-      31, 31, 31, 31, 31, 15, 31, 10, 10,  4,
-       9, 31,  9,  0, 31,  4,  4,  5,  0, 15,
-      31, 31, 31, 10,  0, 31, 31, 31, 31, 31,
+      31, 31, 31, 31, 31,  4, 31, 10, 15,  9,
+      15, 31,  4,  0, 31,  9,  5,  5, 15,  0,
+      31, 31, 10, 15,  0, 31, 31, 31, 31, 31,
       31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
       31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
       31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
@@ -80,8 +80,6 @@ GPerfHasher (register const char *str, register size_t len)
   return asso_values[(unsigned char)str[3]] + asso_values[(unsigned char)str[0]];
 }
 
-// Don't think we need this but keeping it around for now
-#if 0
 const char *
 GPerfIDLookup (register const char *str, register size_t len)
 {
@@ -89,23 +87,24 @@ GPerfIDLookup (register const char *str, register size_t len)
     {
       "INST",
       "", "", "",
-      "NAME",
+      "ANNO",
       "MIDI",
+      "", "",
+      "AUTH",
+      "APPL",
+      "COMT",
       "", "",
       "(c) ",
       "MARK",
-      "COMT",
-      "", "", "",
-      "FORM",
       "COMM",
       "", "", "",
-      "APPL",
-      "SSND",
-      "", "", "",
-      "AUTH",
       "AESD",
+      "FORM",
+      "", "", "",
+      "NAME",
+      "FLLR",
       "", "", "", "",
-      "ANNO"
+      "SSND"
     };
 
   if (len <= MAX_WORD_LENGTH && len >= MIN_WORD_LENGTH)
@@ -122,4 +121,3 @@ GPerfIDLookup (register const char *str, register size_t len)
     }
   return 0;
 }
-#endif

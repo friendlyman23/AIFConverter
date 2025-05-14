@@ -62,7 +62,7 @@ AdvancePointer(uint8 *StartingByte, int32 BytesRead)
 }
 
 void *
-Win32_GetFilePointer(LPCWSTR Filename)
+Win32_GetAifFilePointer(LPCWSTR Filename)
 {
     LPVOID FileAddress = 0;
     HANDLE FileHandle = CreateFileW(Filename, GENERIC_READ, FILE_SHARE_READ, 0, 
@@ -111,7 +111,7 @@ Win32_GetFilePointer(LPCWSTR Filename)
     return(FileAddress);
 }
 
-void
+inline void
 SteenCopy(uint8 *MemToCopy, uint8 *MemDestination, int BytesToCopy)
 {
     for(int BytesCopied = 0; BytesCopied < BytesToCopy; BytesCopied++)
@@ -120,7 +120,7 @@ SteenCopy(uint8 *MemToCopy, uint8 *MemDestination, int BytesToCopy)
     }
 }
 
-void
+inline void
 ReadID(char *IDStart, char *ID)
 {
     for(int i = 0; i < ID_WIDTH; i++)
@@ -132,7 +132,7 @@ ReadID(char *IDStart, char *ID)
     ID[ID_WIDTH] = '\0';
 }
 
-bool32 
+inline bool32 
 AreIDsTheSame(char *IDToCheck, char *IDToCheckAgainst)
 {
     for(int LetterIndex = 0; LetterIndex < ID_WIDTH; LetterIndex++)
@@ -147,7 +147,7 @@ AreIDsTheSame(char *IDToCheck, char *IDToCheckAgainst)
     return(true);
 }
 
-void
+inline void
 ValidateID(char *IDToCheck, char *IDToCheckAgainst, char *CallingFunction)
 {
     if(!AreIDsTheSame(IDToCheck, IDToCheckAgainst))
@@ -166,13 +166,13 @@ ValidateID(char *IDToCheck, char *IDToCheckAgainst, char *CallingFunction)
     }
 }
 
-bool32 
+inline bool32 
 AreIntsTheSame(int IntToCheck, int IntToCheckAgainst)
 {
     return(IntToCheck == IntToCheckAgainst);
 }
 
-void
+inline void
 ValidateInteger(int IntToCheck, int IntToCheckAgainst, char *CallingFunction)
 {
     if(!AreIntsTheSame(IntToCheck, IntToCheckAgainst))
@@ -191,7 +191,7 @@ ValidateInteger(int IntToCheck, int IntToCheckAgainst, char *CallingFunction)
     }
 }
 
-void
+inline void
 ValidateIntegerRange(int IntToCheck, int LowerBound, int UpperBound, char *CallingFunction)
 {
     if( !( (LowerBound < IntToCheck) && (IntToCheck < UpperBound) ) )
@@ -218,7 +218,7 @@ ValidateIntegerRange(int IntToCheck, int LowerBound, int UpperBound, char *Calli
 //    we need, but if we use it more often, may need to tune 
 //    it up because sometimes data that reads as 0 is 
 //    actually valid data
-void
+inline void
 ValidatePointer(uint8 *PointerToCheck, char *CallingFunction)
 {
     if(*PointerToCheck == 0)
@@ -941,7 +941,7 @@ FlipSampleEndianness24Bits(common_chunk *CommonChunk, uint8 *LittleEndianSamples
 void
 ValidateAifFile(form_chunk *FormChunk, common_chunk *CommonChunk, 
 		sound_data_chunk_header *SoundDataChunkHeader,
-		uint8 *Aif_FileStart, int TimesChunkAppears[CHUNK_ID_HASH_ARRAY_SIZE])
+		uint8 *Aif_FileStart, int TimesChunkAppears[HASHED_CHUNK_ID_ARRAY_SIZE])
 {
     // STOP: Update this function so that we just go ahead and fill out
     //	  the Sound Data chunk while we're here since trying to validate

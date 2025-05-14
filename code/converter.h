@@ -19,25 +19,43 @@ typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef uint64_t uint64;
 
-#define FORM_CHUNK		     14
+// Hash values for chunk types. We hash the 4-byte
+//    strings used in .aif files so that we can quickly
+//    match them with a switch statement as we parse the file,
+//    rather than doing endless if(strncmp()) tests
+#define FORM_CHUNK		     20
 #define COMMON_CHUNK                 15
-#define SOUND_DATA_CHUNK             20
-#define MARKER_CHUNK                  9
+#define SOUND_DATA_CHUNK             30
+#define MARKER_CHUNK                 14 
 #define INSTRUMENT_CHUNK              0
 #define COMMENT_CHUNK                10
-#define NAME_CHUNK                    4
-#define AUTHOR_CHUNK                 24
-#define COPYRIGHT_CHUNK               8
-#define ANNOTATION_CHUNK             30
-#define AUDIO_RECORDING_CHUNK        25
+#define NAME_CHUNK                   24
+#define AUTHOR_CHUNK                  8
+#define COPYRIGHT_CHUNK              13
+#define ANNOTATION_CHUNK              4
+#define AUDIO_RECORDING_CHUNK        19
 #define MIDI_CHUNK                    5
-#define APPLICATION_SPECIFIC_CHUNK   19
-#define CHUNK_ID_HASH_ARRAY_SIZE 31
+#define APPLICATION_SPECIFIC_CHUNK    9
+#define FILLER_CHUNK		     25
+
+// Other useful chunk-related defines for readability. We talk about
+//    chunks a lot in the code.
+#define TOTAL_CHUNK_TYPES	     13
+#define HASHED_CHUNK_ID_ARRAY_SIZE     31
+
+//    .aif files have three essential chunks:
+//	  1.) Form chunk
+//	  2.) Common chunk
+//	  3.) Sound Data chunk
+#define TOTAL_IMPORTANT_CHUNK_TYPES  3
 
 
+// Function-like macros
 #define Assert(Value) if(!(Value)) {*(int *)0 = 0;}
 #define ArrayCount(Array) ( (sizeof(Array)) / (sizeof(Array[0])) )
 #define Stringize(Variable) #Variable
+#define Kilobytes(NumKilobytes) ( (NumKilobytes) * 1024)
+#define Megabytes(NumMegabytes) ( ( Kilobytes( (NumMegabytes) ) ) * 1024)
 
 /*
  * The aif spec: https://www.mmsp.ece.mcgill.ca/Documents/AudioFormats/AIFF/AIFF.html 
@@ -65,6 +83,35 @@ typedef uint64_t uint64;
 // miscellaneous defines
 #define BITS_IN_BYTE 8
 #define MAX_STRING_LEN 255 
+
+// Here come da chunks
+    // Form chunk
+    // Common chunk		    Highest precedence
+    // Sound Data chunk
+    // Marker chunk
+    // Instrument chunk
+    // Comment chunk
+    // Name chunk
+    // Author chunk
+    // Copyright chunk
+    // Annotation chunk
+    // Audio Recording chunk
+    // MIDI Data chunk
+    // Application Specific chunk   Lowest precedence
+
+struct aif_important_chunk_addresses
+{
+    uint8 *FormChunkAddress;
+    uint8 *CommonChunkAddress;
+    uint8 *SoundDataChunkAddress;
+};
+
+struct aif_generic_chunk_header
+{
+    char ID[ID_WIDTH];
+    int32 ChunkSize;
+    uint8 Data[];
+};
 
 struct form_chunk
 {

@@ -5,8 +5,6 @@
 #include "converter.h"
 #include "converter.cpp"
 
-static HANDLE HeapHandle = GetProcessHeap();
-
 /* TODO:
  *    1. For chunk types that should only appear once in a file, assert one doesn't already exist
  *	    when we start reading
@@ -65,6 +63,194 @@ int WinMain(HINSTANCE Instance,
         PSTR CmdLine, 
         int CmdShow)
 {
+    LPCWSTR Aif_Filename = L"SC88PR~1.AIF";
+    uint8 *Aif_FileStart;
+
+    //INIT
+    //	  Load .aif file
+    //	  Allocate memory
+    //	  Structure memory
+    //	  Declare count array
+    //	  Declare Aif_Index pointer
+
+    //	  Load .aif file
+    HANDLE HeapHandle = GetProcessHeap();
+
+    if(HeapHandle)
+    {
+        Aif_FileStart = (uint8 *)Win32_GetAifFilePointer(Aif_Filename);
+    }
+    else
+    {
+	char DebugPrintStringBuffer[MAX_STRING_LEN];
+	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+		"\nERROR:\n\t"
+		"At program start, failed to get HeapHandle, so exited");
+	OutputDebugStringA((char *)DebugPrintStringBuffer);
+	exit(1);
+    }
+
+    //	  Allocate 1 mb of memory
+    int Aif_SpaceForImportantChunkAddresses = sizeof(aif_important_chunk_addresses);
+    int AmountOfChunkMemory = ( 
+				    Aif_SpaceForImportantChunkAddresses + 
+				    ( Megabytes(1) - Aif_SpaceForImportantChunkAddresses )
+			      );
+
+    uint8 *ChunkMemoryStart = (uint8 *)Win32_AllocateMemory(AmountOfChunkMemory, __func__);
+
+    //	  Structure chunk memory
+    /* TODO: PROFILE AND SEE IF SHRINKING THE CHUNK MEMORY ALLOC TO FIT IN CACHE MAKES
+     *	  IT FASTER */
+
+    aif_important_chunk_addresses *Aif_ImportantChunkAddresses = 
+				    (aif_important_chunk_addresses *)ChunkMemoryStart;
+
+    uint8 **Aif_UnimportantChunks = (uint8 **)( ChunkMemoryStart + ( sizeof(aif_important_chunk_addresses) ) );
+    
+    //	  Declare count array
+    int CountOfEachChunkType[HASHED_CHUNK_ID_ARRAY_SIZE] = {0};
+
+    //PREPROCESS
+    //	  Declare Aif_Index pointer
+    //	  Process the Form chunk
+    //	  Scan for the other chunks and store their pointers
+
+    uint8 *Aif_FileIndex = Aif_FileStart;
+    int Aif_FileBytesRead = 0;
+
+    form_chunk FormChunk = {};
+    uint8 *Aif_FormChunk_Start = (uint8 *)Aif_FileIndex;
+    Aif_ImportantChunkAddresses->FormChunkAddress = Aif_FormChunk_Start;
+    int Aif_FormChunk_BytesRead = App_Parse_Aif_Chunk(Aif_FormChunk_Start, &FormChunk);
+    Aif_FileBytesRead += Aif_FormChunk_BytesRead;
+    Aif_FileIndex = AdvancePointer(Aif_FileStart, Aif_FileBytesRead);
+
+    uint8 *LastByteInFile = (Aif_FileStart + CHUNK_HEADER_BOILERPLATE + FormChunk.ChunkSize);
+
+    int CountOfUnimportantChunks = 0;
+    while(Aif_FileIndex < LastByteInFile)
+    {
+	aif_generic_chunk_header *ThisChunksHeader = (aif_generic_chunk_header *)Aif_FileIndex;
+	unsigned int HashedChunkID = GPerfHasher(ThisChunksHeader->ID, ID_WIDTH);
+	if(HashedChunkID == FORM_CHUNK)
+	{
+	    char DebugPrintStringBuffer[MAX_STRING_LEN];
+	    sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+		    "\nERROR:\n\t"
+		    "\n\t\tThis .aif file contains more than one Form chunk,"
+		    "\n\t\twhich is not permitted by the .aif specification."
+		    "\n\t\tTherefore, your .aif file appears to be corrupted."
+		    "\n\nThis program will now exit.");
+	    OutputDebugStringA((char *)DebugPrintStringBuffer);
+	    exit(1);
+	}
+	else if(HashedChunkID == COMMON_CHUNK)
+	{
+	    Aif_ImportantChunkAddresses->CommonChunkAddress = Aif_FileIndex;
+	}
+	else if(HashedChunkID == SOUND_DATA_CHUNK)
+	{
+	    Aif_ImportantChunkAddresses->SoundDataChunkAddress = Aif_FileIndex;
+	}
+	else
+	{
+	    Aif_UnimportantChunks[CountOfUnimportantChunks] = Aif_FileIndex;
+	    CountOfUnimportantChunks++;
+	}
+	    CountOfEachChunkType[HashedChunkID]++;
+	    // Skip over the rest of the chunk
+	    Aif_FileIndex = ThisChunksHeader->Data;
+	    Aif_FileIndex += FlipEndianness(ThisChunksHeader->ChunkSize);
+    }
+
+    // Check COMM appears once and only once
+    // If COMM.NumSampleFrames > 0
+    //	  Check SSND appears once and only once
+    //	  and check SSND.ChunkSize > 8
+
+    if(CountOfEachChunkType[COMMON_CHUNK] == 0)
+    {
+	char DebugPrintStringBuffer[MAX_STRING_LEN];
+	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+		"\nERROR:\n\t"
+		"\n\t\tThis .aif file does not contain a Common chunk."
+		"\n\t\tSince all .aif files must have one,"
+		"\n\t\tyour .aif file appears to be corrupted."
+		"\n\nThis program will now exit.");
+	OutputDebugStringA((char *)DebugPrintStringBuffer);
+	exit(1);
+    }
+    if(CountOfEachChunkType[COMMON_CHUNK] > 1)
+    {
+	char DebugPrintStringBuffer[MAX_STRING_LEN];
+	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+		"\nERROR:\n\t"
+		"\n\t\tThis .aif file contains more than one Common chunk,"
+		"\n\t\twhich is not permitted by the .aif specification."
+		"\n\t\tTherefore, your .aif file appears to be corrupted."
+		"\n\nThis program will now exit.");
+	OutputDebugStringA((char *)DebugPrintStringBuffer);
+	exit(1);
+    }
+    // STOP: Midstream on validation code
+
+    // If we make it here, there must be exactly one Common chunk
+
+    // If the Common Chunk says the file has sample frames, then there must be
+    //	  a Sound Data chunk
+#if 0
+    if( (CommonChunk->NumSampleFrames > 0) && (TimesChunkAppears[SOUND_DATA_CHUNK] == 0) )
+    {
+	char DebugPrintStringBuffer[MAX_STRING_LEN];
+	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+		"\nERROR:\n\t"
+		"\n\t\tYour .aif file reports that it contains sound samples,"
+		"\n\t\tbut this program was unable to locate the Sound Data chunk"
+		"\n\t\twhere sound samples are stored."
+		"\n\t\tTherefore, your .aif file appears to be corrupted."
+		"\n\nThis program will now exit.");
+	OutputDebugStringA((char *)DebugPrintStringBuffer);
+	exit(1);
+    }
+
+    // There can only be one Sound Data chunk if one exists at all
+    else if(CountOfEachChunkType[SOUND_DATA_CHUNK] > 1)
+    { 
+	char DebugPrintStringBuffer[MAX_STRING_LEN];
+	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+		"\nERROR:\n\t"
+		"\n\t\tThis .aif file contains more than one Sound Data chunk,"
+		"\n\t\twhich is not permitted by the .aif specification."
+		"\n\t\tTherefore, your .aif file appears to be corrupted."
+		"\n\nThis program will now exit.");
+	OutputDebugStringA((char *)DebugPrintStringBuffer);
+	exit(1);
+    }
+#endif
+    
+    // Finally, some other checks to affirm that the data reported by the
+    //	  Common and Sound Data chunks are in agreement
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // todo: free the other allocs
+    HeapFree(HeapHandle, 0, ChunkMemoryStart);
+
+    return(0);
+}
+#if 0
     LPCWSTR Aif_Filename = L"SC88PR~1.AIF";
     uint8 *Aif_FileStart;
 
@@ -367,8 +553,10 @@ int WinMain(HINSTANCE Instance,
     uint8 *WavFileAddress = (uint8 *)WavFileVoid;
 
     CloseHandle(WavFileHandle);
+    HeapFree(HeapHandle, 0, LittleEndianSamplesStart);
     HeapFree(HeapHandle, 0, (uint8 *)MarkerChunk_Header.Markers);
     HeapFree(HeapHandle, 0, LittleEndianSamplesStart);
 
     return(0);
 }
+#endif
