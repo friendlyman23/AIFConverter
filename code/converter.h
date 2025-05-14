@@ -19,6 +19,22 @@ typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef uint64_t uint64;
 
+#define FORM_CHUNK		     14
+#define COMMON_CHUNK                 15
+#define SOUND_DATA_CHUNK             20
+#define MARKER_CHUNK                  9
+#define INSTRUMENT_CHUNK              0
+#define COMMENT_CHUNK                10
+#define NAME_CHUNK                    4
+#define AUTHOR_CHUNK                 24
+#define COPYRIGHT_CHUNK               8
+#define ANNOTATION_CHUNK             30
+#define AUDIO_RECORDING_CHUNK        25
+#define MIDI_CHUNK                    5
+#define APPLICATION_SPECIFIC_CHUNK   19
+#define CHUNK_ID_HASH_ARRAY_SIZE 31
+
+
 #define Assert(Value) if(!(Value)) {*(int *)0 = 0;}
 #define ArrayCount(Array) ( (sizeof(Array)) / (sizeof(Array[0])) )
 #define Stringize(Variable) #Variable
@@ -38,23 +54,20 @@ typedef uint64_t uint64;
 */
 #define ID_WIDTH 4
 
-/*
- * aif stores sample rate in an 80-bit (10-byte) floating point
- * data type. MSVC doesn't support this type. We attempt to
- * truncate it and store it in a double. We abort the conversion if
- * the truncation would result in data loss.
-*/
+// Width of special extended precision floating point number that
+//    .aif files use to store sample rate
 #define EXTENDED_WIDTH 10
 
+// Convenient macro that allows us to quickly skip over some boilerplate
+//    fields in chunk headers
+#define CHUNK_HEADER_BOILERPLATE (ID_WIDTH + sizeof(int32))
 
 // miscellaneous defines
 #define BITS_IN_BYTE 8
 #define MAX_STRING_LEN 255 
 
-
 struct form_chunk
 {
-    uint8 *Address;
     char ID[ID_WIDTH + 1];
     int32 ChunkSize;
     char FormType[ID_WIDTH + 1];
@@ -63,7 +76,6 @@ struct form_chunk
 
 struct common_chunk
 {
-    uint8 *Address;
     char ID[ID_WIDTH + 1];
     int32 ChunkSize;
     int16 NumChannels;
@@ -91,12 +103,10 @@ struct marker
 struct marker_chunk_header
 {
     char ID[ID_WIDTH + 1];
-    uint8 *Address;
     int32 Size;
     uint16 TotalMarkers;
     uint8 *Markers;
 };
-
 
 struct loop
 {
@@ -107,7 +117,6 @@ struct loop
 
 struct instrument_chunk
 {
-    uint8 *Address;
     char ID[ID_WIDTH + 1];
     int32 ChunkSize;
     int8 BaseNote;
@@ -146,17 +155,12 @@ struct sound_data_chunk_header
     uint8 *SamplesStart;
 };
 
-
 		    /**********************WAV FILE SECTION**************************/
 
 /*
  * Currently, this utility only supports conversion of uncompressed PCM .aif files 
  * to uncompressed PCM .wav files. For such files, some fields in .wav file headers 
- * are constant and can be declared at compile time.
- *
- 	For uncompressed PCM .wav files, the size of the format chunk should always
- *	be 16 bytes, because the format chunk will only require the following
- *	fields:
+ * are constant and can be declared at compile time:
  *
  *		Field			        Type	      Size (bytes)
  *	   ---------------                  ------------      ------------
@@ -171,12 +175,12 @@ struct sound_data_chunk_header
  */    
 #define WAV_FORMAT_CHUNK_DATA_SIZE 16
 
-/*
- *    For uncompressed PCM, the FormatTag field should always be 1:
- */
+// For uncompressed PCM, the FormatTag field should always be 1:
 #define WAV_UNCOMPRESSED_PCM_FORMAT_TAG 1
 
 
+// Pack the bytes for the wav_header struct so we don't have to worry about struct
+//    padding when writing .wav files to disk
 #pragma pack(push,1)
 struct wav_header {
     // Riff chunk
@@ -206,14 +210,14 @@ struct wav_header {
  *	(Total size of file) - 
  *	[ (size of wav_header GroupID field) + (size of wav_header WavFileSize field) ]
  *
- * i.e., The size of the file, less the GroupID and WavFileSize fields.
+ * i.e., The size of the file, less the GroupID and WavFileSize fields (see above)
  *
  */
 #define HEADER_SIZE_FOR_FILE_SIZE_CALC (offsetof(wav_header, RiffType))
 
 // .aif files encode note pitches via their corresponding midi pitch value, which
 // is a number between 0 and 128. We fetch the corresponding pitch value via this table.
-char *MidiNoteLUT[128] = 
+const char *MidiNoteLUT[128] = 
 {
     /*  0 - 11 */   "C-2",  "C#-2", "D-2",  "D#-2", "E-2",  "F-2",  "F#-2", "G-2",  "G#-2", "A-2",  "A#-2", "B-2",
     /* 12 - 23 */   "C-1",  "C#-1", "D-1",  "D#-1", "E-1",  "F-1",  "F#-1", "G-1",  "G#-1", "A-1",  "A#-1", "B-1",

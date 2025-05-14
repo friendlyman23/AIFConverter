@@ -1,5 +1,5 @@
 /* ANSI-C code produced by gperf version 3.1 */
-/* Command-line: gperf --output-file=GperfHash.c input.gperf  */
+/* Command-line: gperf --output-file=GPerfHash.c input.gperf  */
 /* Computed positions: -k'1,4' */
 
 #if !((' ' == 32) && ('!' == 33) && ('"' == 34) && ('#' == 35) \
@@ -46,7 +46,7 @@ inline
 #endif
 /*ARGSUSED*/
 static unsigned int
-hash (register const char *str, register size_t len)
+GPerfHasher (register const char *str, register size_t len)
 {
   static unsigned char asso_values[] =
     {
@@ -56,7 +56,7 @@ hash (register const char *str, register size_t len)
       31, 31,  4, 31, 31, 31, 31, 31, 31, 31,
        4, 31, 31, 31, 31, 31, 31, 31, 31, 31,
       31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
-      31, 31, 31, 31, 31, 15, 31, 10, 10, 
+      31, 31, 31, 31, 31, 15, 31, 10, 10,  4,
        9, 31,  9,  0, 31,  4,  4,  5,  0, 15,
       31, 31, 31, 10,  0, 31, 31, 31, 31, 31,
       31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
@@ -80,10 +80,12 @@ hash (register const char *str, register size_t len)
   return asso_values[(unsigned char)str[3]] + asso_values[(unsigned char)str[0]];
 }
 
+// Don't think we need this but keeping it around for now
+#if 0
 const char *
-MatchChunkID(register const char *str, register size_t len)
+GPerfIDLookup (register const char *str, register size_t len)
 {
-  static const char * wordlist[] =
+  static const char * GPerfHashTable[] =
     {
       "INST",
       "", "", "",
@@ -108,15 +110,16 @@ MatchChunkID(register const char *str, register size_t len)
 
   if (len <= MAX_WORD_LENGTH && len >= MIN_WORD_LENGTH)
     {
-      register unsigned int key = hash (str, len);
+      register unsigned int key = GPerfHasher (str, len);
 
       if (key <= MAX_HASH_VALUE)
         {
-          register const char *s = wordlist[key];
+          register const char *s = GPerfHashTable[key];
 
-          if (*str == *s && !strcmp (str + 1, s + 1))
+          if (*str == *s && !strncmp (str + 1, s + 1, len - 1) && s[len] == '\0')
             return s;
         }
     }
   return 0;
 }
+#endif
