@@ -97,16 +97,16 @@ int WinMain(HINSTANCE Instance,
 				    ( Megabytes(1) - Aif_SpaceForImportantChunkAddresses )
 			      );
 
-    uint8 *ChunkMemoryStart = (uint8 *)Win32_AllocateMemory(AmountOfChunkMemory, __func__);
+    uint8 *MemoryStart = (uint8 *)Win32_AllocateMemory(AmountOfChunkMemory, __func__);
 
     //	  Structure chunk memory
     /* TODO: PROFILE AND SEE IF SHRINKING THE CHUNK MEMORY ALLOC TO FIT IN CACHE MAKES
      *	  IT FASTER */
 
     aif_important_chunk_addresses *Aif_ImportantChunkAddresses = 
-				    (aif_important_chunk_addresses *)ChunkMemoryStart;
+				    (aif_important_chunk_addresses *)MemoryStart;
 
-    uint8 **Aif_UnimportantChunks = (uint8 **)( ChunkMemoryStart + ( sizeof(aif_important_chunk_addresses) ) );
+    uint8 **Aif_UnimportantChunkLUT = (uint8 **)( MemoryStart + sizeof(aif_important_chunk_addresses) );
     
     //	  Declare count array
     int CountOfEachChunkType[HASHED_CHUNK_ID_ARRAY_SIZE] = {0};
@@ -131,8 +131,15 @@ int WinMain(HINSTANCE Instance,
     int CountOfUnimportantChunks = 0;
     while(Aif_FileIndex < LastByteInFile)
     {
-	aif_generic_chunk_header *ThisChunksHeader = (aif_generic_chunk_header *)Aif_FileIndex;
-	unsigned int HashedChunkID = GPerfHasher(ThisChunksHeader->ID, ID_WIDTH);
+	struct generic_chunk_header
+	{
+	    char ID[ID_WIDTH];
+	    int32 ChunkSize;
+	    uint8 Data[];
+	};
+
+	generic_chunk_header *ThisChunksHeader = (generic_chunk_header *)Aif_FileIndex;
+	Chunk HashedChunkID = (Chunk)GPerfHasher(ThisChunksHeader->ID, ID_WIDTH);
 	if(HashedChunkID == FORM_CHUNK)
 	{
 	    char DebugPrintStringBuffer[MAX_STRING_LEN];
@@ -151,11 +158,11 @@ int WinMain(HINSTANCE Instance,
 	}
 	else if(HashedChunkID == SOUND_DATA_CHUNK)
 	{
-	    Aif_ImportantChunkAddresses->SoundDataChunkAddress = Aif_FileIndex;
+	    Aif_ImportantChunkAddresses->SoundDataChunkHeaderAddress = Aif_FileIndex;
 	}
 	else
 	{
-	    Aif_UnimportantChunks[CountOfUnimportantChunks] = Aif_FileIndex;
+	    Aif_UnimportantChunkLUT[CountOfUnimportantChunks] = Aif_FileIndex;
 	    CountOfUnimportantChunks++;
 	}
 	    CountOfEachChunkType[HashedChunkID]++;
@@ -193,14 +200,21 @@ int WinMain(HINSTANCE Instance,
 	OutputDebugStringA((char *)DebugPrintStringBuffer);
 	exit(1);
     }
-    // STOP: Midstream on validation code
+
+    // Parse Common chunk
+    common_chunk CommonChunk = {};
+    App_Parse_Aif_Chunk(Aif_ImportantChunkAddresses->CommonChunkAddress, &CommonChunk);
+
+    // Parse Sound Data chunk header
+    sound_data_chunk_header SoundDataChunkHeader = {};
+    App_Parse_Aif_Chunk(Aif_ImportantChunkAddresses->SoundDataChunkHeaderAddress, &SoundDataChunkHeader);
+
 
     // If we make it here, there must be exactly one Common chunk
 
     // If the Common Chunk says the file has sample frames, then there must be
     //	  a Sound Data chunk
-#if 0
-    if( (CommonChunk->NumSampleFrames > 0) && (TimesChunkAppears[SOUND_DATA_CHUNK] == 0) )
+    if( (CommonChunk.NumSampleFrames > 0) && (CountOfEachChunkType[SOUND_DATA_CHUNK] == 0) )
     {
 	char DebugPrintStringBuffer[MAX_STRING_LEN];
 	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
@@ -227,26 +241,109 @@ int WinMain(HINSTANCE Instance,
 	OutputDebugStringA((char *)DebugPrintStringBuffer);
 	exit(1);
     }
-#endif
     
-    // Finally, some other checks to affirm that the data reported by the
-    //	  Common and Sound Data chunks are in agreement
+    //	  The Sound Data and Common chunks need to agree on the number of bytes
+//	  of samples the .aif file contains. 
+    //
+    //	  First we compute the number of bytes of samples the Sound Data chunk 
+    //	  should have, based on some metadata the Common Chunk reports...
+    int32 CommonChunk_BytesPerSample = (CommonChunk.SampleSize / BITS_IN_BYTE);
+    
+    int32 ExpectedSoundDataChunkSize = ( CommonChunk.NumSampleFrames * 
+					    CommonChunk.NumChannels * 
+					    CommonChunk_BytesPerSample );
+
+    // Sound Data chunk's ChunkSize field accounts for some boilerplate that 
+    //	  we don't want to include here, so subtract it
+    int SoundDataChunk_ChunkSize_WithoutBoilerplate = (
+							SoundDataChunkHeader.ChunkSize - 
+							sizeof(SoundDataChunkHeader.Offset) - 
+							sizeof(SoundDataChunkHeader.BlockSize)
+						      );
+
+    if(ExpectedSoundDataChunkSize != SoundDataChunk_ChunkSize_WithoutBoilerplate)
+    {
+	char DebugPrintStringBuffer[MAX_STRING_LEN];
+	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+		"\nERROR:\n\t"
+		"\n\t\tThe metadata reported by this .aif file's Common chunk"
+		"\n\t\tfor the number of sample bytes the file contains"
+		"\n\t\tis inaccurate."
+		"\n\t\tTherefore, your .aif file appears to be corrupted."
+		"\n\nThis program will now exit.");
+	OutputDebugStringA((char *)DebugPrintStringBuffer);
+	exit(1);
+    }
+
+    // We now have a valid file, so we can parse the unimportant chunks
+
+    // Demarcate the start of the actual Unimportant Chunk data
+    uint8 *Local_UnimportantChunkData_Start = (uint8 *)( Aif_UnimportantChunkLUT + CountOfUnimportantChunks );
+    uint8 *Local_NextFreeByte = Local_UnimportantChunkData_Start;
+
+    uint8 *Stack_Local_UnimportantChunkLUT[CountOfUnimportantChunks] = {0};
+     
+    for(int UnimportantChunkIndex = 0; 
+	    UnimportantChunkIndex < CountOfUnimportantChunks;
+	    UnimportantChunkIndex++)
+    {
+	uint8 **DoNotCrossThisLine = (uint8 **)(Aif_UnimportantChunkLUT + CountOfUnimportantChunks);
+	Assert(&Aif_UnimportantChunkLUT[UnimportantChunkIndex] < DoNotCrossThisLine);
+
+	// pointing at the aif chunk
+	uint8 *Aif_UnimportantChunkStart = Aif_UnimportantChunkLUT[UnimportantChunkIndex];
+	char *Aif_UnimportantChunkID = (char *)Aif_UnimportantChunkStart;
+	Chunk HashedChunkID = (Chunk)GPerfHasher(UnimportantChunkID, ID_WIDTH);
+	switch(HashedChunkID)
+	{
+	    case MARKER_CHUNK:
+	    {
+		uint8 *Aif_MarkerChunkStart = Aif_UnimportantChunkStart;
+		marker_chunk_header *Local_MarkerChunkStart = 
+					(marker_chunk_header *)Local_NextFreeByte;
+		Stack_Local_UnimportantChunkLUT[UnimportantChunkIndex] = (uint8 *)Local_MarkerChunkStart;
+		Local_MarkerChunApp_Parse_Aif_Chunk(Aif_MarkerChunkStart, Local_MarkerChunkStart);
+
+		Local_NextFreeByte = AdvancePointer(Local_MarkerChunkStart, BytesReadInMarkerChunkHeader);
+
+		marker *Local_MarkerDataStart = (marker *)Local_UnimportantChunkData_NextOpenByte;
+		BytesReadInMarkerChunkData = App_Parse_Aif_Chunk(Local_MarkerChunkDataStart, MarkerChunkHeader->Markers, 
+
+		BytesReadInMarkerChunkData = App_Parse_Aif_Chunk(
+		NextOpenSpotInLocal_UnimportantChunkData
+	    } break;
+
+	    default:
+	    {
+		char MisbehavingChunkIDBuffer[ID_WIDTH + 1];
+		ReadID(UnimportantChunkID, MisbehavingChunkIDBuffer);
+		char DebugPrintStringBuffer[MAX_STRING_LEN];
+		sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+			"\nERROR:\n\t"
+			"\n\t\tCould not match chunk ID \"%s\""
+			"\n\t\tTo any known .aif chunk type\n"
+			"\n\t\tWhen parsing unimportant chunks.\n\n",
+			MisbehavingChunkIDBuffer);
+		OutputDebugStringA((char *)DebugPrintStringBuffer);
+		exit(1);
+	    } break;
+	}
+	
 
 
+	
 
 
+	
 
-
-
-
-
-
-
-
+    }
 
 
     // todo: free the other allocs
-    HeapFree(HeapHandle, 0, ChunkMemoryStart);
+
+#endif
+
+    HeapFree(HeapHandle, 0, MemoryStart);
 
     return(0);
 }

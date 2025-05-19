@@ -121,15 +121,15 @@ SteenCopy(uint8 *MemToCopy, uint8 *MemDestination, int BytesToCopy)
 }
 
 inline void
-ReadID(char *IDStart, char *ID)
+ReadID(char *StartOfIDToRead, char *ID_Destination)
 {
     for(int i = 0; i < ID_WIDTH; i++)
     {
-        char *Letter = (char *)(IDStart + i);
-        ID[i] = *Letter;
+        char *Letter = (char *)(StartOfIDToRead + i);
+        ID_Destination[i] = *Letter;
     }
 
-    ID[ID_WIDTH] = '\0';
+    ID_Destination[ID_WIDTH] = '\0';
 }
 
 inline bool32 
@@ -936,138 +936,4 @@ FlipSampleEndianness24Bits(common_chunk *CommonChunk, uint8 *LittleEndianSamples
     }
 
     return(BytesWritten);
-}
-
-void
-ValidateAifFile(form_chunk *FormChunk, common_chunk *CommonChunk, 
-		sound_data_chunk_header *SoundDataChunkHeader,
-		uint8 *Aif_FileStart, int TimesChunkAppears[HASHED_CHUNK_ID_ARRAY_SIZE])
-{
-    // STOP: Update this function so that we just go ahead and fill out
-    //	  the Sound Data chunk while we're here since trying to validate
-    //	  the file without having all of the chunk information stored
-    //	  in a way that is convenient to access is too cumbersome
-    uint64 Aif_TotalBytesInFile = ID_WIDTH + FormChunk->ChunkSize;
-    uint8 *Aif_LastByteInFile = Aif_FileStart + (Aif_TotalBytesInFile);
-    uint8 *Aif_FileIndex = FormChunk->SubChunksStart;
-
-    uint8 *SoundDataChunkStart = 0;
-    while(Aif_FileIndex < Aif_LastByteInFile)
-    {
-	char *ThisChunksID = (char *)Aif_FileIndex;
-	unsigned int HashedID = GPerfHasher(ThisChunksID, ID_WIDTH);
-	
-	// Maybe these loops should be a function since they are exactly the same
-	if(HashedID == COMMON_CHUNK)
-	{
-	    if(TimesChunkAppears[COMMON_CHUNK] > 0)
-	    {
-		char DebugPrintStringBuffer[MAX_STRING_LEN];
-		sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
-			"\nERROR:\n\t"
-			"\n\t\tThis .aif file contains more than one Common chunk,"
-			"\n\t\twhich is not permitted by the .aif specification."
-			"\n\t\tTherefore, your .aif file appears to be corrupted."
-			"\n\nThis program will now exit.");
-		OutputDebugStringA((char *)DebugPrintStringBuffer);
-		exit(1);
-	    }
-	    else
-	    {
-		App_Parse_Aif_Chunk(Aif_FileIndex, CommonChunk);
-		TimesChunkAppears[COMMON_CHUNK]++;
-	    }
-	}
-	else if(HashedID == SOUND_DATA_CHUNK)
-	{
-	    if(TimesChunkAppears[SOUND_DATA_CHUNK] > 0)
-	    {
-		char DebugPrintStringBuffer[MAX_STRING_LEN];
-		sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
-			"\nERROR:\n\t"
-			"\n\t\tThis .aif file contains more than one Sound Data chunk,"
-			"\n\t\twhich is not permitted by the .aif specification."
-			"\n\t\tTherefore, your .aif file appears to be corrupted."
-			"\n\nThis program will now exit.");
-		OutputDebugStringA((char *)DebugPrintStringBuffer);
-		exit(1);
-	    }
-	    else
-	    {
-		App_Parse_Aif_Chunk(Aif_FileIndex, SoundDataChunkHeader);
-		TimesChunkAppears[SOUND_DATA_CHUNK]++;
-	    }
-	}
-	else
-	{
-	    TimesChunkAppears[HashedID]++;
-	}
-
-	Aif_FileIndex += ID_WIDTH;
-	uint32 *BytesToSkipToNextChunk = (uint32 *)Aif_FileIndex;
-	Aif_FileIndex += *BytesToSkipToNextChunk;
-    }
-
-    // Confirm we found a Common Chunk
-    if(TimesChunkAppears[COMMON_CHUNK] == 0)
-    {
-	char DebugPrintStringBuffer[MAX_STRING_LEN];
-	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
-		"\nERROR:\n\t"
-		"\n\t\tThis .aif file does not contain a Common chunk."
-		"\n\t\tSince all .aif files must have one,"
-		"\n\t\tyour .aif file appears to be corrupted."
-		"\n\nThis program will now exit.");
-	OutputDebugStringA((char *)DebugPrintStringBuffer);
-	exit(1);
-    }
-
-    // If the Common Chunk says the file has sample frames, then there must be
-    //	  a Sound Data chunk
-    if( (CommonChunk->NumSampleFrames > 0) && (TimesChunkAppears[SOUND_DATA_CHUNK] == 0) )
-    {
-	char DebugPrintStringBuffer[MAX_STRING_LEN];
-	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
-		"\nERROR:\n\t"
-		"\n\t\tYour .aif file reports that it contains sound samples,"
-		"\n\t\tbut this program was unable to locate the Sound Data chunk"
-		"\n\t\twhere sound samples are stored."
-		"\n\t\tTherefore, your .aif file appears to be corrupted."
-		"\n\nThis program will now exit.");
-	OutputDebugStringA((char *)DebugPrintStringBuffer);
-	exit(1);
-    }
-    // The Sound Data and Common chunks need to agree on the number of bytes
-    //	  of samples the .aif file contains. 
-    //
-    //	  First we compute the number of bytes of samples the Sound Data chunk 
-    //	  should have, based on some metadata the Common Chunk reports...
-    int32 CommonChunk_BytesPerSample = (CommonChunk->SampleSize / BITS_IN_BYTE);
-    
-    int32 ExpectedSoundDataChunkSize = ( CommonChunk->NumSampleFrames * 
-					    CommonChunk->NumChannels * 
-					    CommonChunk_BytesPerSample );
-
-
-    // Sound Data chunk's ChunkSize field accounts for some boilerplate that 
-    //	  we don't want to include here, so subtract it
-    int SoundDataChunk_ChunkSize_WithoutBoilerplate = (
-							SoundDataChunkHeader->ChunkSize - 
-							sizeof(SoundDataChunkHeader->Offset) + 
-							sizeof(SoundDataChunkHeader->BlockSize)
-						      );
-
-    if(ExpectedSoundDataChunkSize != SoundDataChunk_ChunkSize_WithoutBoilerplate)
-    {
-	char DebugPrintStringBuffer[MAX_STRING_LEN];
-	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
-		"\nERROR:\n\t"
-		"\n\t\tThe metadata reported by this .aif file's Common chunk"
-		"\n\t\tfor the number of sample bytes the file contains"
-		"\n\t\tis inaccurate."
-		"\n\t\tTherefore, your .aif file appears to be corrupted."
-		"\n\nThis program will now exit.");
-	OutputDebugStringA((char *)DebugPrintStringBuffer);
-	exit(1);
-    }
 }

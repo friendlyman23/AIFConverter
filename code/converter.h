@@ -19,24 +19,29 @@ typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef uint64_t uint64;
 
+// Values derived from Gperf hash function
+typedef enum 
+{
+    FORM_CHUNK =		     20,
+    COMMON_CHUNK =		     15,
+    SOUND_DATA_CHUNK =		     30,
+    MARKER_CHUNK =		     14,
+    INSTRUMENT_CHUNK =		      0,
+    COMMENT_CHUNK =		     10,
+    NAME_CHUNK =		     24,
+    AUTHOR_CHUNK =		      8,
+    COPYRIGHT_CHUNK =		     13,
+    ANNOTATION_CHUNK =		      4,
+    AUDIO_RECORDING_CHUNK =	     19,
+    MIDI_CHUNK =		      5,
+    APPLICATION_SPECIFIC_CHUNK =      9,
+    FILLER_CHUNK =		     25
+} Chunk;
+
 // Hash values for chunk types. We hash the 4-byte
 //    strings used in .aif files so that we can quickly
 //    match them with a switch statement as we parse the file,
 //    rather than doing endless if(strncmp()) tests
-#define FORM_CHUNK		     20
-#define COMMON_CHUNK                 15
-#define SOUND_DATA_CHUNK             30
-#define MARKER_CHUNK                 14 
-#define INSTRUMENT_CHUNK              0
-#define COMMENT_CHUNK                10
-#define NAME_CHUNK                   24
-#define AUTHOR_CHUNK                  8
-#define COPYRIGHT_CHUNK              13
-#define ANNOTATION_CHUNK              4
-#define AUDIO_RECORDING_CHUNK        19
-#define MIDI_CHUNK                    5
-#define APPLICATION_SPECIFIC_CHUNK    9
-#define FILLER_CHUNK		     25
 
 // Other useful chunk-related defines for readability. We talk about
 //    chunks a lot in the code.
@@ -103,14 +108,7 @@ struct aif_important_chunk_addresses
 {
     uint8 *FormChunkAddress;
     uint8 *CommonChunkAddress;
-    uint8 *SoundDataChunkAddress;
-};
-
-struct aif_generic_chunk_header
-{
-    char ID[ID_WIDTH];
-    int32 ChunkSize;
-    uint8 Data[];
+    uint8 *SoundDataChunkHeaderAddress;
 };
 
 struct form_chunk
