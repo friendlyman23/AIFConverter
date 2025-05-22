@@ -1,5 +1,6 @@
 #if !defined (CONVERTER_H)
 
+#include <windows.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -14,12 +15,12 @@ typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef uint64_t uint64;
 
-typedef uint8_t uint8;
-typedef uint16_t uint16;
-typedef uint32_t uint32;
-typedef uint64_t uint64;
+// Hash values for chunk types. We hash the 4-byte
+//    strings used in .aif files so that we can quickly
+//    match them with a switch statement as we parse the file,
+//    rather than doing endless if(strncmp()) tests.
+//    Note: Values derived from Gperf hash function
 
-// Values derived from Gperf hash function
 typedef enum 
 {
     FORM_CHUNK =		     20,
@@ -36,12 +37,7 @@ typedef enum
     MIDI_CHUNK =		      5,
     APPLICATION_SPECIFIC_CHUNK =      9,
     FILLER_CHUNK =		     25
-} Chunk;
-
-// Hash values for chunk types. We hash the 4-byte
-//    strings used in .aif files so that we can quickly
-//    match them with a switch statement as we parse the file,
-//    rather than doing endless if(strncmp()) tests
+} chunk;
 
 // Other useful chunk-related defines for readability. We talk about
 //    chunks a lot in the code.
@@ -59,8 +55,8 @@ typedef enum
 #define Assert(Value) if(!(Value)) {*(int *)0 = 0;}
 #define ArrayCount(Array) ( (sizeof(Array)) / (sizeof(Array[0])) )
 #define Stringize(Variable) #Variable
-#define Kilobytes(NumKilobytes) ( (NumKilobytes) * 1024)
-#define Megabytes(NumMegabytes) ( ( Kilobytes( (NumMegabytes) ) ) * 1024)
+#define Kilobytes(NumKilobytes) ((NumKilobytes) * 1024)
+#define Megabytes(NumMegabytes) ((Kilobytes((NumMegabytes))) * 1024)
 
 /*
  * The aif spec: https://www.mmsp.ece.mcgill.ca/Documents/AudioFormats/AIFF/AIFF.html 
@@ -104,19 +100,12 @@ typedef enum
     // MIDI Data chunk
     // Application Specific chunk   Lowest precedence
 
-struct aif_important_chunk_addresses
-{
-    uint8 *FormChunkAddress;
-    uint8 *CommonChunkAddress;
-    uint8 *SoundDataChunkHeaderAddress;
-};
-
 struct form_chunk
 {
     char ID[ID_WIDTH + 1];
     int32 ChunkSize;
     char FormType[ID_WIDTH + 1];
-    uint8 *SubChunksStart;
+    uint8 SubChunksStart[];
 };
 
 struct common_chunk
@@ -145,7 +134,7 @@ struct marker
 //    required to store the marker data we read from the .aif file
 #define MARKER_BOILERPLATE (offsetof(marker, MarkerNameLen))
 
-struct marker_chunk_header
+struct marker_chunk
 {
     char ID[ID_WIDTH + 1];
     int32 Size;
@@ -178,7 +167,7 @@ struct instrument_chunk
     loop ReleaseLoop;
 };
 
-struct filler_chunk_header
+struct filler_chunk
 {
     // this appears in aif files but is not documented in the aif spec.
     // For some reason.
@@ -191,13 +180,20 @@ struct filler_chunk_header
 
 };
 
-struct sound_data_chunk_header
+struct sound_data_chunk
 {
     char ID[ID_WIDTH + 1];
     int32 ChunkSize;
     uint32 Offset;
     uint32 BlockSize;
     uint8 *SamplesStart;
+};
+
+struct generic_chunk_header
+{
+    char ID[ID_WIDTH];
+    int32 ChunkSize;
+    uint8 Data[];
 };
 
 		    /**********************WAV FILE SECTION**************************/
