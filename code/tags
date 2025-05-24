@@ -48,7 +48,7 @@
 !_TAG_PARSER_VERSION!C++	1.1	/current.age/
 !_TAG_PARSER_VERSION!GPerf	0.0	/current.age/
 !_TAG_PATTERN_LENGTH_LIMIT	96	/0 for no limit/
-!_TAG_PROC_CWD	W:/converter/code/	//
+!_TAG_PROC_CWD	w:/converter/code/	//
 !_TAG_PROGRAM_AUTHOR	Universal Ctags Team	//
 !_TAG_PROGRAM_NAME	Universal Ctags	/Derived from Exuberant Ctags/
 !_TAG_PROGRAM_URL	https://ctags.io/	/official site/
@@ -85,6 +85,8 @@ APPLICATION_SPECIFIC_CHUNK	./converter.h	/^    APPLICATION_SPECIFIC_CHUNK =     
 AUDIO_RECORDING_CHUNK	./converter.h	/^    AUDIO_RECORDING_CHUNK =	     19,$/;"	e	enum:__anon650f5a900103
 AUTHOR_CHUNK	./converter.h	/^    AUTHOR_CHUNK =		      8,$/;"	e	enum:__anon650f5a900103
 AdvancePointer	./converter.cpp	/^AdvancePointer(uint8 *StartingByte, int32 BytesRead)$/;"	f	typeref:typename:uint8 *
+Aif_Chunk	./win32_converter.cpp	/^    uint8 *Aif_Chunk;$/;"	m	struct:chunk_finder	typeref:typename:uint8 *	file:
+Aif_MarkerID	./converter.h	/^    int16 Aif_MarkerID; \/\/ For some reason .aif uses "ID" to refer to the unique$/;"	m	struct:aif_marker	typeref:typename:int16
 AreIDsTheSame	./converter.cpp	/^AreIDsTheSame(char *IDToCheck, char *IDToCheckAgainst)$/;"	f	typeref:typename:bool32
 AreIntsTheSame	./converter.cpp	/^AreIntsTheSame(int IntToCheck, int IntToCheckAgainst)$/;"	f	typeref:typename:bool32
 ArenaAlloc	./win32_converter.cpp	/^ArenaAlloc(uint64 Size)$/;"	f	typeref:typename:arena *
@@ -95,8 +97,9 @@ ArrayCount	./converter.h	/^#define ArrayCount(/;"	d
 Assert	./converter.h	/^#define Assert(/;"	d
 AvgBytesPerSec	./converter.h	/^    uint32 AvgBytesPerSec;     \/\/ sampleRate × numChannels × bitsPerSample\/8 (4)$/;"	m	struct:wav_header	typeref:typename:uint32
 BITS_IN_BYTE	./converter.h	/^#define BITS_IN_BYTE /;"	d
+BaseNote	./converter.h	/^    int8 BaseNote;$/;"	m	struct:aif_instrument_chunk	typeref:typename:int8
 BaseNote	./converter.h	/^    int8 BaseNote;$/;"	m	struct:instrument_chunk	typeref:typename:int8
-BaseNoteDecode	./converter.h	/^    char *BaseNoteDecode;$/;"	m	struct:instrument_chunk	typeref:typename:char *
+BeginLoopMarker	./converter.h	/^    int16 BeginLoopMarker;$/;"	m	struct:aif_loop	typeref:typename:int16
 BeginLoopMarker	./converter.h	/^    int16 BeginLoopMarker;$/;"	m	struct:loop	typeref:typename:int16
 BitsPerSample	./converter.h	/^    uint16 BitsPerSample;  $/;"	m	struct:wav_header	typeref:typename:uint16
 BlockAlign	./converter.h	/^    uint16 BlockAlign;   \/\/ numChannels × bitsPerSample\/8 (2)$/;"	m	struct:wav_header	typeref:typename:uint16
@@ -107,11 +110,14 @@ COMMON_CHUNK	./converter.h	/^    COMMON_CHUNK =		     15,$/;"	e	enum:__anon650f5
 CONVERTER_H	./converter.h	/^#define CONVERTER_H$/;"	d
 COPYRIGHT_CHUNK	./converter.h	/^    COPYRIGHT_CHUNK =		     13,$/;"	e	enum:__anon650f5a900103
 ChunkSize	./OLD_win32_converter.cpp	/^	    int32 ChunkSize;$/;"	m	struct:WinMain::generic_chunk_header	typeref:typename:int32	file:
+ChunkSize	./converter.h	/^    int32 ChunkSize;$/;"	m	struct:aif_form_chunk	typeref:typename:int32
+ChunkSize	./converter.h	/^    int32 ChunkSize;$/;"	m	struct:aif_instrument_chunk	typeref:typename:int32
 ChunkSize	./converter.h	/^    int32 ChunkSize;$/;"	m	struct:common_chunk	typeref:typename:int32
 ChunkSize	./converter.h	/^    int32 ChunkSize;$/;"	m	struct:form_chunk	typeref:typename:int32
 ChunkSize	./converter.h	/^    int32 ChunkSize;$/;"	m	struct:generic_chunk_header	typeref:typename:int32
 ChunkSize	./converter.h	/^    int32 ChunkSize;$/;"	m	struct:instrument_chunk	typeref:typename:int32
 ChunkSize	./converter.h	/^    int32 ChunkSize;$/;"	m	struct:sound_data_chunk	typeref:typename:int32
+Converted_Chunk	./win32_converter.cpp	/^    uint8 *Converted_Chunk;$/;"	m	struct:chunk_finder	typeref:typename:uint8 *	file:
 Data	./OLD_win32_converter.cpp	/^	    uint8 Data[];$/;"	m	struct:WinMain::generic_chunk_header	typeref:typename:uint8[]	file:
 Data	./converter.h	/^    uint8 Data[];$/;"	m	struct:generic_chunk_header	typeref:typename:uint8[]
 DataChunkID	./converter.h	/^    char DataChunkID[ID_WIDTH]; \/\/ "data"$/;"	m	struct:wav_header	typeref:typename:char[]
@@ -119,9 +125,11 @@ DataChunk_ChunkSize	./converter.h	/^    uint32 DataChunk_ChunkSize;\/\/ numSampl
 DebugPrintDouble	./converter.cpp	/^DebugPrintDouble(double d)$/;"	f	typeref:typename:void
 DebugPrintInt	./converter.cpp	/^DebugPrintInt(int i)$/;"	f	typeref:typename:void
 DebugPrintString	./converter.cpp	/^DebugPrintString(char *s)$/;"	f	typeref:typename:void
+Detune	./converter.h	/^    int8 Detune;$/;"	m	struct:aif_instrument_chunk	typeref:typename:int8
 Detune	./converter.h	/^    int8 Detune;$/;"	m	struct:instrument_chunk	typeref:typename:int8
 DoNotCrossThisLine	./win32_converter.cpp	/^    uint8 *DoNotCrossThisLine;$/;"	m	struct:arena	typeref:typename:uint8 *	file:
 EXTENDED_WIDTH	./converter.h	/^#define EXTENDED_WIDTH /;"	d
+EndLoopMarker	./converter.h	/^    int16 EndLoopMarker;$/;"	m	struct:aif_loop	typeref:typename:int16
 EndLoopMarker	./converter.h	/^    int16 EndLoopMarker;$/;"	m	struct:loop	typeref:typename:int16
 FILLER_CHUNK	./converter.h	/^    FILLER_CHUNK =		     25$/;"	e	enum:__anon650f5a900103
 FORM_CHUNK	./converter.h	/^    FORM_CHUNK =		     20,$/;"	e	enum:__anon650f5a900103
@@ -132,6 +140,7 @@ FlipEndianness	./converter.cpp	/^FlipEndianness(uint32 IntToFlip)$/;"	f	typeref:
 FlipSampleEndianness16Bits	./converter.cpp	/^FlipSampleEndianness16Bits(common_chunk *CommonChunk, uint8 *LittleEndianSamplesStart, $/;"	f	typeref:typename:int
 FlipSampleEndianness24Bits	./converter.cpp	/^FlipSampleEndianness24Bits(common_chunk *CommonChunk, uint8 *LittleEndianSamplesStart, $/;"	f	typeref:typename:int
 FormType	./converter.h	/^    char FormType[ID_WIDTH + 1];$/;"	m	struct:form_chunk	typeref:typename:char[]
+FormType	./converter.h	/^    char FormType[ID_WIDTH];$/;"	m	struct:aif_form_chunk	typeref:typename:char[]
 FormatChunkID	./converter.h	/^    char FormatChunkID[ID_WIDTH];   \/\/ "fmt " 4$/;"	m	struct:wav_header	typeref:typename:char[]
 FormatChunk_ChunkSize	./converter.h	/^    uint32 FormatChunk_ChunkSize = WAV_FORMAT_CHUNK_DATA_SIZE;$/;"	m	struct:wav_header	typeref:typename:uint32
 FormatTag	./converter.h	/^    uint16 FormatTag = WAV_UNCOMPRESSED_PCM_FORMAT_TAG;$/;"	m	struct:wav_header	typeref:typename:uint16
@@ -139,13 +148,17 @@ GPerfHasher	./GPerfHash.c	/^GPerfHasher (register const char *str, register size
 GPerfHasher	./input.gperf	/^%define hash-function-name GPerfHasher$/;"	h
 GPerfIDLookup	./GPerfHash.c	/^GPerfIDLookup (register const char *str, register size_t len)$/;"	f	typeref:typename:const char *
 GPerfIDLookup	./input.gperf	/^%define lookup-function-name GPerfIDLookup$/;"	l
+Gain	./converter.h	/^    int16 Gain;$/;"	m	struct:aif_instrument_chunk	typeref:typename:int16
 Gain	./converter.h	/^    int16 Gain;$/;"	m	struct:instrument_chunk	typeref:typename:int16
+GetNumBytesToStoreConverted_Markers	./converter.cpp	/^GetNumBytesToStoreConverted_Markers(uint8 *Aif_MarkersData_Start, int32 TotalMarkers)$/;"	f	typeref:typename:int
 GetSampleRate	./converter.cpp	/^GetSampleRate(uint8 *FirstByteOfExtendedPrecisionFloat)$/;"	f	typeref:typename:uint32
 GroupID	./converter.h	/^    char GroupID[ID_WIDTH];       \/\/ "RIFF" 4$/;"	m	struct:wav_header	typeref:typename:char[]
 HASHED_CHUNK_ID_ARRAY_SIZE	./converter.h	/^#define HASHED_CHUNK_ID_ARRAY_SIZE /;"	d
 HEADER_SIZE_FOR_FILE_SIZE_CALC	./converter.h	/^#define HEADER_SIZE_FOR_FILE_SIZE_CALC /;"	d
+HashedID	./win32_converter.cpp	/^    chunk HashedID;$/;"	m	struct:chunk_finder	typeref:typename:chunk	file:
+HighNote	./converter.h	/^    int8 HighNote;$/;"	m	struct:aif_instrument_chunk	typeref:typename:int8
 HighNote	./converter.h	/^    int8 HighNote;$/;"	m	struct:instrument_chunk	typeref:typename:int8
-HighNoteDecode	./converter.h	/^    char *HighNoteDecode;$/;"	m	struct:instrument_chunk	typeref:typename:char *
+HighVelocity	./converter.h	/^    int8 HighVelocity;$/;"	m	struct:aif_instrument_chunk	typeref:typename:int8
 HighVelocity	./converter.h	/^    int8 HighVelocity;$/;"	m	struct:instrument_chunk	typeref:typename:int8
 ID	./OLD_win32_converter.cpp	/^	    char ID[ID_WIDTH];$/;"	m	struct:WinMain::generic_chunk_header	typeref:typename:char[]	file:
 ID	./converter.h	/^    char ID[ID_WIDTH + 1];$/;"	m	struct:common_chunk	typeref:typename:char[]
@@ -154,13 +167,15 @@ ID	./converter.h	/^    char ID[ID_WIDTH + 1];$/;"	m	struct:form_chunk	typeref:ty
 ID	./converter.h	/^    char ID[ID_WIDTH + 1];$/;"	m	struct:instrument_chunk	typeref:typename:char[]
 ID	./converter.h	/^    char ID[ID_WIDTH + 1];$/;"	m	struct:marker_chunk	typeref:typename:char[]
 ID	./converter.h	/^    char ID[ID_WIDTH + 1];$/;"	m	struct:sound_data_chunk	typeref:typename:char[]
+ID	./converter.h	/^    char ID[ID_WIDTH];$/;"	m	struct:aif_form_chunk	typeref:typename:char[]
+ID	./converter.h	/^    char ID[ID_WIDTH];$/;"	m	struct:aif_instrument_chunk	typeref:typename:char[]
 ID	./converter.h	/^    char ID[ID_WIDTH];$/;"	m	struct:generic_chunk_header	typeref:typename:char[]
-ID	./converter.h	/^    int16 ID;$/;"	m	struct:marker	typeref:typename:int16
 ID_WIDTH	./converter.h	/^#define ID_WIDTH /;"	d
 INSTRUMENT_CHUNK	./converter.h	/^    INSTRUMENT_CHUNK =		      0,$/;"	e	enum:__anon650f5a900103
 Kilobytes	./converter.h	/^#define Kilobytes(NumKilobytes) ((NumKilobytes)/;"	d
+LowNote	./converter.h	/^    int8 LowNote;$/;"	m	struct:aif_instrument_chunk	typeref:typename:int8
 LowNote	./converter.h	/^    int8 LowNote;$/;"	m	struct:instrument_chunk	typeref:typename:int8
-LowNoteDecode	./converter.h	/^    char *LowNoteDecode;$/;"	m	struct:instrument_chunk	typeref:typename:char *
+LowVelocity	./converter.h	/^    int8 LowVelocity;$/;"	m	struct:aif_instrument_chunk	typeref:typename:int8
 LowVelocity	./converter.h	/^    int8 LowVelocity;$/;"	m	struct:instrument_chunk	typeref:typename:int8
 MARKER_BOILERPLATE	./converter.h	/^#define MARKER_BOILERPLATE /;"	d
 MARKER_CHUNK	./converter.h	/^    MARKER_CHUNK =		     14,$/;"	e	enum:__anon650f5a900103
@@ -171,12 +186,10 @@ MAX_WORD_LENGTH	./GPerfHash.c	/^#define MAX_WORD_LENGTH /;"	d	file:
 MIDI_CHUNK	./converter.h	/^    MIDI_CHUNK =		      5,$/;"	e	enum:__anon650f5a900103
 MIN_HASH_VALUE	./GPerfHash.c	/^#define MIN_HASH_VALUE /;"	d	file:
 MIN_WORD_LENGTH	./GPerfHash.c	/^#define MIN_WORD_LENGTH /;"	d	file:
-MarkerHelperFunction	./converter.cpp	/^MarkerHelperFunction(uint8 *Aif_Index, int32 TotalMarkers)$/;"	f	typeref:typename:int
-MarkerName	./converter.h	/^    char MarkerName[];$/;"	m	struct:marker	typeref:typename:char[]
-MarkerNameLen	./converter.h	/^    uint8 MarkerNameLen;$/;"	m	struct:marker	typeref:typename:uint8
+MarkerName	./converter.h	/^    char MarkerName[];$/;"	m	struct:aif_marker	typeref:typename:char[]
+MarkerNameLen	./converter.h	/^    uint8 MarkerNameLen;$/;"	m	struct:aif_marker	typeref:typename:uint8
 Markers	./converter.h	/^    uint8 *Markers;$/;"	m	struct:marker_chunk	typeref:typename:uint8 *
 Megabytes	./converter.h	/^#define Megabytes(NumMegabytes) ((Kilobytes((NumMegabytes)/;"	d
-MidiNoteLUT	./converter.h	/^const char *MidiNoteLUT[128] = $/;"	v	typeref:typename:const char * [128]
 NAME_CHUNK	./converter.h	/^    NAME_CHUNK =		     24,$/;"	e	enum:__anon650f5a900103
 NextFreeByte	./win32_converter.cpp	/^    uint8 *NextFreeByte;$/;"	m	struct:arena	typeref:typename:uint8 *	file:
 NumChannels	./converter.h	/^    int16 NumChannels;$/;"	m	struct:common_chunk	typeref:typename:int16
@@ -185,16 +198,18 @@ NumSampleFrames	./converter.h	/^    uint32 NumSampleFrames;$/;"	m	struct:common_
 Offset	./converter.h	/^    uint32 Offset;$/;"	m	struct:sound_data_chunk	typeref:typename:uint32
 ParseCommonChunk	./converter.cpp	/^ParseCommonChunk(uint8 *Aif_CommonChunk_Start, common_chunk *CommonChunk)$/;"	f	typeref:typename:int
 ParseFillerChunk	./converter.cpp	/^ParseFillerChunk(uint8 *Aif_FillerChunk_Start, filler_chunk *FillerChunk)$/;"	f	typeref:typename:int
-ParseFormChunk	./converter.cpp	/^ParseFormChunk(uint8 *Aif_FormChunk_Start, form_chunk *FormChunk)$/;"	f	typeref:typename:int
-ParseInstrumentChunk	./converter.cpp	/^ParseInstrumentChunk(uint8 *Aif_InstrumentChunk_Start, instrument_chunk *InstrumentChunk)$/;"	f	typeref:typename:int
-ParseMarkerChunk	./converter.cpp	/^ParseMarkerChunk(uint8 *Aif_MarkerChunk_Start, marker_chunk *MarkerChunk)$/;"	f	typeref:typename:int
-ParseMarkers	./converter.cpp	/^ParseMarkers(uint8 *Aif_MarkerChunk_Start, $/;"	f	typeref:typename:int32
+ParseFormChunk	./converter.cpp	/^ParseFormChunk(uint8 *Aif_FormChunk_Start, $/;"	f	typeref:typename:int
+ParseInstrumentChunk	./converter.cpp	/^ParseInstrumentChunk(uint8 *Aif_InstrumentChunk_Start, instrument_chunk *Converted_InstrumentChu/;"	f	typeref:typename:int
+ParseMarkerChunk	./converter.cpp	/^ParseMarkerChunk(uint8 *Aif_MarkerChunk, marker_chunk *Converted_MarkerChunk, $/;"	f	typeref:typename:int
+ParseMarkers	./converter.cpp	/^ParseMarkers(uint8 *Aif_MarkersData_Start, $/;"	f	typeref:typename:int32
 ParseSoundDataChunk	./converter.cpp	/^ParseSoundDataChunk(uint8 *Aif_SoundDataChunk_Start, sound_data_chunk *SoundDataChunk)$/;"	f	typeref:typename:int
+PlayMode	./converter.h	/^    int16 PlayMode;$/;"	m	struct:aif_loop	typeref:typename:int16
 PlayMode	./converter.h	/^    int16 PlayMode;$/;"	m	struct:loop	typeref:typename:int16
-Position	./converter.h	/^    uint32 Position;$/;"	m	struct:marker	typeref:typename:uint32
+Position	./converter.h	/^    uint32 Position;$/;"	m	struct:aif_marker	typeref:typename:uint32
 PushArray	./win32_converter.cpp	/^#define PushArray(/;"	d	file:
 PushStruct	./win32_converter.cpp	/^#define PushStruct(/;"	d	file:
 ReadID	./converter.cpp	/^ReadID(char *StartOfIDToRead, char *ID_Destination)$/;"	f	typeref:typename:void
+ReleaseLoop	./converter.h	/^    aif_loop ReleaseLoop;$/;"	m	struct:aif_instrument_chunk	typeref:typename:aif_loop
 ReleaseLoop	./converter.h	/^    loop ReleaseLoop;$/;"	m	struct:instrument_chunk	typeref:typename:loop
 RiffType	./converter.h	/^    char RiffType[ID_WIDTH];        \/\/ "WAVE" 4$/;"	m	struct:wav_header	typeref:typename:char[]
 SOUND_DATA_CHUNK	./converter.h	/^    SOUND_DATA_CHUNK =		     30,$/;"	e	enum:__anon650f5a900103
@@ -203,9 +218,10 @@ SampleRate	./converter.h	/^    uint32 SampleRate;$/;"	m	struct:wav_header	typere
 SampleSize	./converter.h	/^    int16 SampleSize;$/;"	m	struct:common_chunk	typeref:typename:int16
 SamplesStart	./converter.h	/^    uint8 *SamplesStart;$/;"	m	struct:sound_data_chunk	typeref:typename:uint8 *
 Size	./converter.h	/^    int32 Size;$/;"	m	struct:marker_chunk	typeref:typename:int32
-SteenCopy	./converter.cpp	/^SteenCopy(uint8 *MemToCopy, uint8 *MemDestination, int BytesToCopy)$/;"	f	typeref:typename:void
+SteenCopy	./converter.cpp	/^SteenCopy(uint8 *MemToCopy, uint8 *MemDestination, int BytesToCopy)$/;"	f	typeref:typename:int
 Stringize	./converter.h	/^#define Stringize(/;"	d
-SubChunksStart	./converter.h	/^    uint8 SubChunksStart[];$/;"	m	struct:form_chunk	typeref:typename:uint8[]
+SubChunksStart	./converter.h	/^    uint8 SubChunksStart[];$/;"	m	struct:aif_form_chunk	typeref:typename:uint8[]
+SustainLoop	./converter.h	/^    aif_loop SustainLoop;$/;"	m	struct:aif_instrument_chunk	typeref:typename:aif_loop
 SustainLoop	./converter.h	/^    loop SustainLoop;$/;"	m	struct:instrument_chunk	typeref:typename:loop
 TOTAL_CHUNK_TYPES	./converter.h	/^#define TOTAL_CHUNK_TYPES	/;"	d
 TOTAL_IMPORTANT_CHUNK_TYPES	./converter.h	/^#define TOTAL_IMPORTANT_CHUNK_TYPES /;"	d
@@ -221,13 +237,18 @@ WAV_FORMAT_CHUNK_DATA_SIZE	./converter.h	/^#define WAV_FORMAT_CHUNK_DATA_SIZE /;
 WAV_UNCOMPRESSED_PCM_FORMAT_TAG	./converter.h	/^#define WAV_UNCOMPRESSED_PCM_FORMAT_TAG /;"	d
 WavFileSize	./converter.h	/^    uint32 WavFileSize;				  $/;"	m	struct:wav_header	typeref:typename:uint32
 Win32_AllocateMemory	./converter.cpp	/^Win32_AllocateMemory(int MemSize, char *CallingFunction)$/;"	f	typeref:typename:LPVOID
-Win32_GetAifFilePointer	./converter.cpp	/^Win32_GetAifFilePointer(LPCWSTR Filename)$/;"	f	typeref:typename:void *
+Win32_GetAifFilePointer	./converter.cpp	/^Win32_GetAifFilePointer(LPCWSTR Filename, LARGE_INTEGER *Aif_FileSize)$/;"	f	typeref:typename:void *
 WinMain	./OLD_win32_converter.cpp	/^int WinMain(HINSTANCE Instance, $/;"	f	typeref:typename:int
 WinMain	./win32_converter.cpp	/^int WinMain(HINSTANCE Instance, $/;"	f	typeref:typename:int
 __anon650f5a900103	./converter.h	/^{$/;"	g
+aif_form_chunk	./converter.h	/^struct aif_form_chunk$/;"	s
+aif_instrument_chunk	./converter.h	/^struct aif_instrument_chunk$/;"	s
+aif_loop	./converter.h	/^struct aif_loop$/;"	s
+aif_marker	./converter.h	/^struct aif_marker$/;"	s
 arena	./win32_converter.cpp	/^struct arena$/;"	s	file:
 bool32	./converter.h	/^typedef int32 bool32;$/;"	t	typeref:typename:int32
 chunk	./converter.h	/^} chunk;$/;"	t	typeref:enum:__anon650f5a900103
+chunk_finder	./win32_converter.cpp	/^struct chunk_finder$/;"	s	file:
 common_chunk	./converter.h	/^struct common_chunk$/;"	s
 filler_chunk	./converter.h	/^struct filler_chunk$/;"	s
 form_chunk	./converter.h	/^struct form_chunk$/;"	s
@@ -239,7 +260,6 @@ int32	./converter.h	/^typedef int32_t int32;$/;"	t	typeref:typename:int32_t
 int64	./converter.h	/^typedef int64_t int64;$/;"	t	typeref:typename:int64_t
 int8	./converter.h	/^typedef int8_t int8;$/;"	t	typeref:typename:int8_t
 loop	./converter.h	/^struct loop$/;"	s
-marker	./converter.h	/^struct marker$/;"	s
 marker_chunk	./converter.h	/^struct marker_chunk$/;"	s
 sound_data_chunk	./converter.h	/^struct sound_data_chunk$/;"	s
 uint16	./converter.h	/^typedef uint16_t uint16;$/;"	t	typeref:typename:uint16_t

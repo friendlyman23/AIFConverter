@@ -62,28 +62,27 @@ AdvancePointer(uint8 *StartingByte, int32 BytesRead)
 }
 
 void *
-Win32_GetAifFilePointer(LPCWSTR Filename)
+Win32_GetAifFilePointer(LPCWSTR Filename, LARGE_INTEGER *Aif_FileSize)
 {
     LPVOID FileAddress = 0;
     HANDLE FileHandle = CreateFileW(Filename, GENERIC_READ, FILE_SHARE_READ, 0, 
             OPEN_EXISTING, 0, 0);
     if(FileHandle != INVALID_HANDLE_VALUE)
     {
-        LARGE_INTEGER FileSize;
-        GetFileSizeEx(FileHandle, &FileSize);
-        if(FileSize.QuadPart)
+        GetFileSizeEx(FileHandle, Aif_FileSize);
+        if(Aif_FileSize->QuadPart)
         {
-            Assert(FileSize.QuadPart <= 0xFFFFFFFF);
+            Assert(Aif_FileSize->QuadPart <= 0xFFFFFFFF);
 
             HANDLE HeapHandle = GetProcessHeap();
             if(HeapHandle)
             {
-                FileAddress = HeapAlloc(HeapHandle, HEAP_ZERO_MEMORY, FileSize.QuadPart);
+                FileAddress = HeapAlloc(HeapHandle, HEAP_ZERO_MEMORY, Aif_FileSize->QuadPart);
                 if(FileAddress)
                 {
                     DWORD NumBytesRead;
                     BOOL FileReadSuccessfully = false;
-                    FileReadSuccessfully = ReadFile(FileHandle, FileAddress, FileSize.QuadPart, &NumBytesRead, 0);
+                    FileReadSuccessfully = ReadFile(FileHandle, FileAddress, Aif_FileSize->QuadPart, &NumBytesRead, 0);
                     if(!FileReadSuccessfully)
                     {
                         OutputDebugStringA("failed to read file\n");
@@ -111,13 +110,15 @@ Win32_GetAifFilePointer(LPCWSTR Filename)
     return(FileAddress);
 }
 
-inline void
+inline int
 SteenCopy(uint8 *MemToCopy, uint8 *MemDestination, int BytesToCopy)
 {
-    for(int BytesCopied = 0; BytesCopied < BytesToCopy; BytesCopied++)
+    int BytesCopied = 0;
+    for(BytesCopied; BytesCopied < BytesToCopy; BytesCopied++)
     {
         *MemDestination++ = *MemToCopy++;
     }
+    return(BytesCopied);
 }
 
 inline void
@@ -194,7 +195,7 @@ ValidateInteger(int IntToCheck, int IntToCheckAgainst, char *CallingFunction)
 inline void
 ValidateIntegerRange(int IntToCheck, int LowerBound, int UpperBound, char *CallingFunction)
 {
-    if( !( (LowerBound < IntToCheck) && (IntToCheck < UpperBound) ) )
+    if( !( (LowerBound <= IntToCheck) && (IntToCheck <= UpperBound) ) )
     {
         char DebugPrintStringBuffer[MAX_STRING_LEN];
         sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
@@ -328,6 +329,19 @@ ValidateAif(int CountOfEachChunkType[],
 		"\n\t\tThe metadata reported by this .aif file's Common chunk"
 		"\n\t\tfor the number of sample bytes the file contains"
 		"\n\t\tis inaccurate."
+		"\n\t\tTherefore, your .aif file appears to be corrupted."
+		"\n\nThis program will now exit.");
+	OutputDebugStringA((char *)DebugPrintStringBuffer);
+	exit(1);
+    }
+
+    if(CountOfEachChunkType[INSTRUMENT_CHUNK] > 1)
+    { 
+	char DebugPrintStringBuffer[MAX_STRING_LEN];
+	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+		"\nERROR:\n\t"
+		"\n\t\tThis .aif file contains more than one Instrument chunk,"
+		"\n\t\twhich is not permitted by the .aif specification."
 		"\n\t\tTherefore, your .aif file appears to be corrupted."
 		"\n\nThis program will now exit.");
 	OutputDebugStringA((char *)DebugPrintStringBuffer);
@@ -500,7 +514,42 @@ GetSampleRate(uint8 *FirstByteOfExtendedPrecisionFloat)
 //    other "App_Parse_Aif_Chunk" functions are not because they 
 //    generally follow the patttern established here.
 
+int
+ParseFormChunk(uint8 *Aif_FormChunk_Start, 
+		form_chunk *Converted_FormChunk, 
+		int64 Aif_FileSize)
+{
+    int BytesRead = 0;
+    aif_form_chunk *Aif_FormChunk = (aif_form_chunk *)Aif_FormChunk_Start;
 
+    // Read the Form chunk ID
+    ReadID(Aif_FormChunk->ID, Converted_FormChunk->ID);
+    BytesRead += sizeof(ID_WIDTH);
+
+    // Read the size of the Form chunk and flip endianness
+    Converted_FormChunk->ChunkSize = FlipEndianness(Aif_FormChunk->ChunkSize);
+    BytesRead += sizeof(Converted_FormChunk->ChunkSize);
+
+    // The ChunkSize of the Form chunk should be equal to the total size of the
+    //	  file, less the number of bytes we've read so far
+    ValidateInteger(Converted_FormChunk->ChunkSize, 
+		    (Aif_FileSize - BytesRead),
+		    __func__);
+
+    // Read the FormType field
+    ReadID(Aif_FormChunk->FormType, Converted_FormChunk->FormType);
+    BytesRead += sizeof(ID_WIDTH);
+
+    // Per .aif spec ID must be FORM or file is invalid
+    ValidateID(Converted_FormChunk->ID, "FORM", __func__);
+
+    // Per .aif spec FormType must be AIFF or file is invalid
+    ValidateID(Converted_FormChunk->FormType, "AIFF", __func__);
+
+    return(BytesRead);
+}
+
+#if 0
 int
 ParseFormChunk(uint8 *Aif_FormChunk_Start, form_chunk *FormChunk)
 {
@@ -561,6 +610,7 @@ ParseFormChunk(uint8 *Aif_FormChunk_Start, form_chunk *FormChunk)
 
     return(BytesRead);
 }
+#endif
 
 int
 ParseCommonChunk(uint8 *Aif_CommonChunk_Start, common_chunk *CommonChunk)
@@ -629,239 +679,184 @@ ParseCommonChunk(uint8 *Aif_CommonChunk_Start, common_chunk *CommonChunk)
 //    For readability, we first parse the header portion of the Marker chunk,
 //    then parse the actual Marker data in a separate function.
 int
-ParseMarkerChunk(uint8 *Aif_MarkerChunk_Start, marker_chunk *MarkerChunk)
+ParseMarkerChunk(uint8 *Aif_MarkerChunk, marker_chunk *Converted_MarkerChunk, 
+			uint8 **Aif_MarkersData_Start)
 {
 
     // Keep track of number of bytes we've read so that
     //	  we can compute necessary offsets
     int32 BytesRead = 0;
-    uint8 *Aif_Index = Aif_MarkerChunk_Start;
+    uint8 *Aif_Index = Aif_MarkerChunk;
 
-    // Store the Marker Chunk ID in its struct on the stack
+    // Store the Marker Chunk ID in its struct in memory
     char *Aif_MarkerChunk_HeaderIDStart = (char *)Aif_Index;
-    ReadID(Aif_MarkerChunk_HeaderIDStart, MarkerChunk->ID);
+    ReadID(Aif_MarkerChunk_HeaderIDStart, Converted_MarkerChunk->ID);
     // Check that we read a valid ID
-    ValidateID(MarkerChunk->ID, "MARK", __func__);
+    ValidateID(Converted_MarkerChunk->ID, "MARK", __func__);
     // Compute updated BytesRead value
     BytesRead += ID_WIDTH;
 
     // Store the size of the Marker Chunk
-    Aif_Index = AdvancePointer(Aif_MarkerChunk_Start, BytesRead);
-    int32 *Aif_MarkerChunk_HeaderSize = (int32 *)Aif_Index;
-    MarkerChunk->Size = FlipEndianness(*Aif_MarkerChunk_HeaderSize);
-    BytesRead += sizeof(MarkerChunk->Size);
+    Aif_Index = AdvancePointer(Aif_MarkerChunk, BytesRead);
+    int32 *Aif_MarkerChunk_Size = (int32 *)Aif_Index;
+    Converted_MarkerChunk->Size = FlipEndianness(*Aif_MarkerChunk_Size);
+    BytesRead += sizeof(Converted_MarkerChunk->Size);
 
     // Store the number of Markers. We use this value later to know
     //	  how much space to put on the heap to store them
-    Aif_Index = AdvancePointer(Aif_MarkerChunk_Start, BytesRead);
+    Aif_Index = AdvancePointer(Aif_MarkerChunk, BytesRead);
     uint16 *Aif_MarkerChunk_HeaderTotalMarkers = (uint16 *)Aif_Index;
-    MarkerChunk->TotalMarkers = FlipEndianness(*Aif_MarkerChunk_HeaderTotalMarkers);
-    BytesRead += sizeof(MarkerChunk->TotalMarkers);
+    Converted_MarkerChunk->TotalMarkers = FlipEndianness(*Aif_MarkerChunk_HeaderTotalMarkers);
+    BytesRead += sizeof(Converted_MarkerChunk->TotalMarkers);
+    Aif_Index = AdvancePointer(Aif_MarkerChunk, BytesRead);
+
+    // Aif_Index now points at the first Marker, so we grab its address so 
+    //	  the separate function that actually parses the markers knows where
+    //	  to start
+    *Aif_MarkersData_Start = Aif_Index;
 
     return(BytesRead);
 }
 
+// In this function we figure out how many bytes to allocate in memory for
+//    converted versions of the Markers.
+//    
+//    Markers in .aif files use Pascal-style strings for their Name field.
+//    i.e., Instead of terminating strings with the null char, the first byte of
+//    the Marker's name is an int that represents the number of one-byte chars 
+//    in the string. The function below refers to this int as "StringLen".
+//
+//    In all other respects, Marker chunk fields have uniform
+//    sizes. In the function below, this uniform number of bytes per marker
+//    is represented as MARKER_BOILERPLATE.
+//
+//    Therefore, the number of required bytes will be equal to:
+//	  (MARKER_BOILERPLATE * Number of Markers)
+//			    +
+//	  Sum of the StringLen fields for Markers
 int
-MarkerHelperFunction(uint8 *Aif_Index, int32 TotalMarkers)
+GetNumBytesToStoreConverted_Markers(uint8 *Aif_MarkersData_Start, int32 TotalMarkers)
 {
     int BytesNeededToStoreMarkers = 0;
-    for(int MarkerNumber = 0; 
-            MarkerNumber < TotalMarkers;  
-            MarkerNumber++)
-    {
-        uint8 *PointerToStringLen = (Aif_Index + MARKER_BOILERPLATE);
-        BytesNeededToStoreMarkers += *PointerToStringLen;
-        Aif_Index += (MARKER_BOILERPLATE + *PointerToStringLen);
-        ++Aif_Index;
-    }
 
-    BytesNeededToStoreMarkers += ( ( offsetof(marker, MarkerName) ) * TotalMarkers );
+    uint8 *Aif_Index = Aif_MarkersData_Start;
+    for(int i = 0; i < TotalMarkers; i++)
+    {
+	aif_marker *ThisMarker = (aif_marker *)Aif_Index;
+	BytesNeededToStoreMarkers += MARKER_BOILERPLATE;
+	BytesNeededToStoreMarkers += ThisMarker->MarkerNameLen;
+
+	// Skip over the MarkerName string to the start of the next Marker
+	Aif_Index = (uint8 *)ThisMarker->MarkerName;
+	Aif_Index += ThisMarker->MarkerNameLen;
+    }
+    
     return(BytesNeededToStoreMarkers);
 }
 
 int32
-ParseMarkers(uint8 *Aif_MarkerChunk_Start, 
-        marker_chunk *MarkerChunk, 
-        int BytesNeededToStoreMarkers)
+ParseMarkers(uint8 *Aif_MarkersData_Start, 
+        marker_chunk *Converted_MarkerChunk, int BytesAllocatedForMarkers)
 {
     int32 BytesRead = 0;
+    int32 BytesWritten = 0;
+    uint8 *Aif_Index = (uint8 *)Aif_MarkersData_Start;
+    uint8 *Converted_Index = Converted_MarkerChunk->Markers;
 
-    //if there are Markers in the aif file
-    if(MarkerChunk->TotalMarkers > 0)
+    for(int MarkerNumber = 0; 
+	    MarkerNumber < Converted_MarkerChunk->TotalMarkers;
+	    MarkerNumber++)
     {
-        // Allocate memory for the Markers
-        uint8 *HeapMarkerChunk_DataStart = (uint8 *)Win32_AllocateMemory(BytesNeededToStoreMarkers, __func__);
+	Aif_Index = AdvancePointer(Aif_MarkersData_Start, BytesRead);
+	Converted_Index = AdvancePointer(Converted_MarkerChunk->Markers, BytesRead);
+	int16 *Aif_MarkerID = (int16 *)Aif_Index;
+	int16 *Converted_MarkerID = (int16 *)Converted_Index;
+	*Converted_MarkerID = FlipEndianness(*Aif_MarkerID);
+	BytesWritten += sizeof(*Converted_MarkerID);
+	Assert(BytesWritten <= BytesAllocatedForMarkers);
 
-        // Store the address of the Markers in the Marker chunk header
-        MarkerChunk->Markers = HeapMarkerChunk_DataStart;
+	// Per the .aif spec, the ID must be a positive integer
+	ValidateIntegerRange(*Converted_MarkerID, 0, INT_MAX, __func__);
+	BytesRead += sizeof(*Converted_MarkerID);
 
-        // Declare two pointers that we use as indices: 
-        //
-        //    One pointer to index into the Marker data in the 
-        //    .aif file (this is the data that we're going to copy
-        //    after flipping the endianness)
-        //
-        //    One pointer to index into the memory we allocated
-        //    for the Marker data (where the copied data is
-        //    going to go)
-        //
-        // Note that we can't treat the allocated memory like an array 
-        // and index it like HeapMarkerChunk_DataStart[1], etc., because 
-        // the MarkerName member of the Marker struct is not known at 
-        // compile time. This is because it's a variable-length string. 
-        // Since the length of the string varies, the size of the Marker 
-        // structs vary, and therefore they can't be stored in an array.
-        uint8 *Aif_Index = (uint8 *)Aif_MarkerChunk_Start;
-        uint8 *HeapMarkerIndex = (uint8 *)HeapMarkerChunk_DataStart;
+	// Read the Marker position
+	Aif_Index = AdvancePointer(Aif_MarkersData_Start, BytesRead);
+	Converted_Index = AdvancePointer(Converted_MarkerChunk->Markers, BytesRead);
+	uint32 *Aif_MarkerPosition = (uint32 *)Aif_Index;
+	uint32 *Converted_MarkerPosition = (uint32 *)Converted_Index;
+	*Converted_MarkerPosition = FlipEndianness(*Aif_MarkerPosition);
+	BytesWritten += sizeof(*Converted_MarkerPosition);
+	Assert(BytesWritten <= BytesAllocatedForMarkers);
+	BytesRead += sizeof(*Converted_MarkerPosition);
 
-        for(int MarkerNumber = 0; 
-                MarkerNumber < MarkerChunk->TotalMarkers;
-                MarkerNumber++)
-        {
-            // Read the Marker ID
-            //	  Confusingly, the .aif spec calls the integer that uniquely identifies
-            //    each Marker an "ID", despite using "ID" exclusively for 
-            //    4-byte char strings elsewhere in the spec. Here it's a 
-            //    16-bit int.
-            //
-            //	  Note: AdvancePointer will have no effect if this
-            //	  is the first time through the loop
-            Aif_Index = AdvancePointer(Aif_MarkerChunk_Start, BytesRead);
-            HeapMarkerIndex = AdvancePointer(HeapMarkerChunk_DataStart, BytesRead);
-            int16 *Aif_MarkerChunk_ID = (int16 *)Aif_Index;
-            int16 *HeapMarkerChunk_ID = (int16 *)HeapMarkerIndex;
-            *HeapMarkerChunk_ID = FlipEndianness(*Aif_MarkerChunk_ID);
+	// Read the length of the string containing the Marker's name 
+	Aif_Index = AdvancePointer(Aif_MarkersData_Start, BytesRead);
+	Converted_Index = AdvancePointer(Converted_MarkerChunk->Markers, BytesRead);
+	// This is just an 8-bit uint, so we don't have to flip endianness
+	uint8 *Aif_MarkerNameStringLen = (uint8 *)Aif_Index;
+	uint8 *Converted_MarkerNameStringLen = (uint8 *)Converted_Index;
+	*Converted_MarkerNameStringLen = *Aif_MarkerNameStringLen;
+	BytesWritten += sizeof(*Converted_MarkerNameStringLen);
+	Assert(BytesWritten <= BytesAllocatedForMarkers);
+	BytesRead += sizeof(*Converted_MarkerNameStringLen);
 
-            // Per the .aif spec, the ID must be a positive integer
-            ValidateIntegerRange(*HeapMarkerChunk_ID, 0, INT_MAX, __func__);
-            BytesRead += sizeof(*HeapMarkerChunk_ID);
-
-            // Read the Marker position
-            Aif_Index = AdvancePointer(Aif_MarkerChunk_Start, BytesRead);
-            HeapMarkerIndex = AdvancePointer(HeapMarkerChunk_DataStart, BytesRead);
-            uint32 *Aif_MarkerChunk_Position = (uint32 *)Aif_Index;
-            uint32 *HeapMarkerChunk_Position = (uint32 *)HeapMarkerIndex;
-            *HeapMarkerChunk_Position = FlipEndianness(*Aif_MarkerChunk_Position);
-            BytesRead += sizeof(*HeapMarkerChunk_Position);
-
-            // Read the length of the string containing the Marker's name 
-            Aif_Index = AdvancePointer(Aif_MarkerChunk_Start, BytesRead);
-            HeapMarkerIndex = AdvancePointer(HeapMarkerChunk_DataStart, BytesRead);
-            // This is just an 8-bit uint, so we don't have to flip endianness
-            uint8 *Aif_MarkerChunk_NameStringLen = (uint8 *)Aif_Index;
-            uint8 *HeapMarkerChunk_NameStringLen = (uint8 *)HeapMarkerIndex;
-            *HeapMarkerChunk_NameStringLen = *Aif_MarkerChunk_NameStringLen;
-            BytesRead += sizeof(*HeapMarkerChunk_NameStringLen);
-
-            // Read the string containing the Marker's name
-            Aif_Index = AdvancePointer(Aif_MarkerChunk_Start, BytesRead);
-            HeapMarkerIndex = AdvancePointer(HeapMarkerChunk_DataStart, BytesRead);
-            // Strings don't need their endianness flipped, so we just do a straight copy
-            SteenCopy(Aif_Index, HeapMarkerIndex, (int)*HeapMarkerChunk_NameStringLen);
-            // Increment BytesRead by the number of bytes in the string
-            BytesRead += *HeapMarkerChunk_NameStringLen;
-        }
-
+	// Read the string containing the Marker's name
+	Aif_Index = AdvancePointer(Aif_MarkersData_Start, BytesRead);
+	Converted_Index = AdvancePointer(Converted_MarkerChunk->Markers, BytesRead);
+	// Strings don't need their endianness flipped, so we just do a straight copy
+	BytesWritten += SteenCopy(Aif_Index, 
+				    Converted_Index, 
+				    (int)*Converted_MarkerNameStringLen);
+	Assert(BytesWritten <= BytesAllocatedForMarkers);
+	// Increment BytesRead by the number of bytes in the string
+	BytesRead += *Converted_MarkerNameStringLen;
     }
+
     return(BytesRead);
 }
 
 int
-ParseInstrumentChunk(uint8 *Aif_InstrumentChunk_Start, instrument_chunk *InstrumentChunk)
+ParseInstrumentChunk(uint8 *Aif_InstrumentChunk_Start, instrument_chunk *Converted_InstrumentChunk)
 {
-    // Keep track of number of bytes we've read so that
-    //	  we can compute necessary offsets
-    int32 BytesRead = 0;
+    int BytesRead = 0;
+    aif_instrument_chunk *Aif_InstrumentChunk = (aif_instrument_chunk *)Aif_InstrumentChunk_Start;
 
-    uint8 *Aif_Index = (uint8 *)Aif_InstrumentChunk_Start;
+    ReadID(Aif_InstrumentChunk->ID, Converted_InstrumentChunk->ID);
+    Converted_InstrumentChunk->ChunkSize = FlipEndianness(Aif_InstrumentChunk->ChunkSize);
+    Converted_InstrumentChunk->BaseNote = Aif_InstrumentChunk->BaseNote;
+    Converted_InstrumentChunk->Detune = Aif_InstrumentChunk->Detune;
+    Converted_InstrumentChunk->LowNote = Aif_InstrumentChunk->LowNote;
+    Converted_InstrumentChunk->HighNote = Aif_InstrumentChunk->HighNote;
+    Converted_InstrumentChunk->LowVelocity = Aif_InstrumentChunk->LowVelocity;
+    Converted_InstrumentChunk->HighVelocity = Aif_InstrumentChunk->HighVelocity;
+    Converted_InstrumentChunk->Gain = FlipEndianness(Aif_InstrumentChunk->Gain);
 
-    // Read the ID
-    char *InstrumentChunk_IDStart = (char *)Aif_Index;
-    ReadID(InstrumentChunk_IDStart, InstrumentChunk->ID);
-    BytesRead += ID_WIDTH;
+    Converted_InstrumentChunk->SustainLoop.PlayMode = 
+		FlipEndianness(Aif_InstrumentChunk->SustainLoop.PlayMode);
+    Converted_InstrumentChunk->SustainLoop.BeginLoopMarker = 
+		FlipEndianness(Aif_InstrumentChunk->SustainLoop.BeginLoopMarker);
+    Converted_InstrumentChunk->SustainLoop.EndLoopMarker = 
+		FlipEndianness(Aif_InstrumentChunk->SustainLoop.EndLoopMarker);
+    Converted_InstrumentChunk->ReleaseLoop.PlayMode = 
+		FlipEndianness(Aif_InstrumentChunk->ReleaseLoop.PlayMode);
+    Converted_InstrumentChunk->ReleaseLoop.BeginLoopMarker = 
+		FlipEndianness(Aif_InstrumentChunk->ReleaseLoop.BeginLoopMarker);
+    Converted_InstrumentChunk->ReleaseLoop.EndLoopMarker = 
+		FlipEndianness(Aif_InstrumentChunk->ReleaseLoop.EndLoopMarker);
 
-    // Read the ChunkSize value
-    Aif_Index = AdvancePointer(Aif_InstrumentChunk_Start, BytesRead);
-    int32 *InstrumentChunk_Size = (int32 *)Aif_Index;
-    InstrumentChunk->ChunkSize = FlipEndianness(*InstrumentChunk_Size);
-    BytesRead += sizeof(InstrumentChunk->ChunkSize);
+    // Chunk size is always 20 per .aif spec
+    ValidateInteger(Converted_InstrumentChunk->ChunkSize, 20, __func__);
 
-    // Read the BaseNote value
-    Aif_Index = AdvancePointer(Aif_InstrumentChunk_Start, BytesRead);
-    int8 *BaseNote = (int8 *)Aif_Index;
-    InstrumentChunk->BaseNote = *BaseNote;
-    InstrumentChunk->BaseNoteDecode = (char *)MidiNoteLUT[InstrumentChunk->BaseNote];
-    BytesRead += sizeof(InstrumentChunk->BaseNote);
+    // Detune value is between -50 and 50 per .aif spec
+    ValidateIntegerRange(Converted_InstrumentChunk->Detune, -50, 50, __func__);
 
-    // Read the Detune value
-    Aif_Index = AdvancePointer(Aif_InstrumentChunk_Start, BytesRead);
-    char *Detune = (char *)Aif_Index;
-    InstrumentChunk->Detune = *Detune;
-    BytesRead += sizeof(InstrumentChunk->Detune);
+    // LowNote, HighNote, LowVelocity, HighVelocity are MIDI note values and 
+    //	  must be between 1 and 127 per .aif spec
+    ValidateIntegerRange(Converted_InstrumentChunk->LowNote, 1, 127, __func__);
+    ValidateIntegerRange(Converted_InstrumentChunk->HighNote, 1, 127, __func__);
+    ValidateIntegerRange(Converted_InstrumentChunk->LowVelocity, 1, 127, __func__);
+    ValidateIntegerRange(Converted_InstrumentChunk->HighVelocity, 1, 127, __func__);
 
-    // Read the LowNote value
-    Aif_Index = AdvancePointer(Aif_InstrumentChunk_Start, BytesRead);
-    char *LowNote = (char *)Aif_Index;
-    InstrumentChunk->LowNote = *LowNote;
-    InstrumentChunk->LowNoteDecode = (char *)MidiNoteLUT[InstrumentChunk->LowNote];
-    BytesRead += sizeof(InstrumentChunk->LowNote);
-
-    // Read the HighNote value
-    Aif_Index = AdvancePointer(Aif_InstrumentChunk_Start, BytesRead);
-    char *HighNote = (char *)Aif_Index;
-    InstrumentChunk->HighNote = *HighNote;
-    InstrumentChunk->HighNoteDecode = (char *)MidiNoteLUT[InstrumentChunk->HighNote];
-    BytesRead += sizeof(InstrumentChunk->HighNote);
-
-    // Read the LowVelocity value
-    Aif_Index = AdvancePointer(Aif_InstrumentChunk_Start, BytesRead);
-    char *LowVelocity = (char *)Aif_Index;
-    InstrumentChunk->LowVelocity = *LowVelocity;
-    BytesRead += sizeof(InstrumentChunk->LowVelocity);
-
-    // Read the HighVelocity value
-    Aif_Index = AdvancePointer(Aif_InstrumentChunk_Start, BytesRead);
-    char *HighVelocity = (char *)Aif_Index;
-    InstrumentChunk->HighVelocity = *HighVelocity;
-    BytesRead += sizeof(InstrumentChunk->HighVelocity);
-
-    // Read the Gain value
-    Aif_Index = AdvancePointer(Aif_InstrumentChunk_Start, BytesRead);
-    int16 *Gain = (int16 *)Aif_Index;
-    InstrumentChunk->Gain = FlipEndianness(*Gain);
-    BytesRead += sizeof(InstrumentChunk->Gain);
-
-    // Read the SustainLoop value
-    Aif_Index = AdvancePointer(Aif_InstrumentChunk_Start, BytesRead);
-    int16 *SustainLoopPlayMode = (int16 *)Aif_Index;
-    InstrumentChunk->SustainLoop.PlayMode = FlipEndianness(*SustainLoopPlayMode);
-    BytesRead += sizeof(InstrumentChunk->SustainLoop.PlayMode);
-
-    Aif_Index = AdvancePointer(Aif_InstrumentChunk_Start, BytesRead);
-    int16 *SustainLoopBeginLoopMarker = (int16 *)Aif_Index;
-    InstrumentChunk->SustainLoop.BeginLoopMarker = FlipEndianness(*SustainLoopBeginLoopMarker);
-    BytesRead += sizeof(InstrumentChunk->SustainLoop.BeginLoopMarker);
-
-    Aif_Index = AdvancePointer(Aif_InstrumentChunk_Start, BytesRead);
-    int16 *SustainLoopEndLoopMarker = (int16 *)Aif_Index;
-    InstrumentChunk->SustainLoop.EndLoopMarker = FlipEndianness(*SustainLoopEndLoopMarker);
-    BytesRead += sizeof(InstrumentChunk->SustainLoop.EndLoopMarker);
-
-    // Read the ReleaseLoop value
-    Aif_Index = AdvancePointer(Aif_InstrumentChunk_Start, BytesRead);
-    int16 *ReleaseLoopPlayMode = (int16 *)Aif_Index;
-    InstrumentChunk->ReleaseLoop.PlayMode = FlipEndianness(*ReleaseLoopPlayMode);
-    BytesRead += sizeof(InstrumentChunk->ReleaseLoop.PlayMode);
-
-    Aif_Index = AdvancePointer(Aif_InstrumentChunk_Start, BytesRead);
-    int16 *ReleaseLoopBeginLoopMarker = (int16 *)Aif_Index;
-    InstrumentChunk->ReleaseLoop.BeginLoopMarker = FlipEndianness(*ReleaseLoopBeginLoopMarker);
-    BytesRead += sizeof(InstrumentChunk->ReleaseLoop.BeginLoopMarker);
-
-    Aif_Index = AdvancePointer(Aif_InstrumentChunk_Start, BytesRead);
-    int16 *ReleaseLoopEndLoopMarker = (int16 *)Aif_Index;
-    InstrumentChunk->ReleaseLoop.EndLoopMarker = FlipEndianness(*ReleaseLoopEndLoopMarker);
-    BytesRead += sizeof(InstrumentChunk->ReleaseLoop.EndLoopMarker);
 
     return(BytesRead);
 }
