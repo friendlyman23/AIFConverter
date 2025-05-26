@@ -100,11 +100,27 @@ typedef enum
     // MIDI Data chunk
     // Application Specific chunk   Lowest precedence
 
-struct form_chunk
+struct arena
+{
+    uint64 ArenaSize;
+    uint8 *DoNotCrossThisLine;
+    uint8 *NextFreeByte;
+    uint8 ArenaStart[];
+};
+
+struct chunk_finder
+{
+    chunk HashedID;
+    uint8 *Aif_Chunk;
+    uint8 *Converted_Chunk;
+};
+
+struct converted_form_chunk
 {
     char ID[ID_WIDTH + 1];
     int32 ChunkSize;
     char FormType[ID_WIDTH + 1];
+    uint8 *Aif_SubChunksStart;
 };
 
 #pragma pack(push,1)
@@ -113,11 +129,11 @@ struct aif_form_chunk
     char ID[ID_WIDTH];
     int32 ChunkSize;
     char FormType[ID_WIDTH];
-    uint8 SubChunksStart[];
+    uint8 SubChunksStart;
 };
 #pragma pack(pop)
 
-struct common_chunk
+struct converted_common_chunk
 {
     char ID[ID_WIDTH + 1];
     int32 ChunkSize;
@@ -126,26 +142,57 @@ struct common_chunk
     int16 SampleSize;
     uint32 SampleRate;
 };
-
-struct marker_chunk
+#pragma pack(push,1)
+struct aif_common_chunk
 {
-    char ID[ID_WIDTH + 1];
-    int32 Size;
-    uint16 TotalMarkers;
-    uint8 *Markers;
+    char ID[ID_WIDTH];
+    int32 ChunkSize;
+    int16 NumChannels;
+    uint32 NumSampleFrames;
+    int16 SampleSize;
+    uint32 SampleRate;
 };
+#pragma pack(pop)
 
 #pragma pack(push,1)
 struct aif_marker
 {
-    int16 Aif_MarkerID; // For some reason .aif uses "ID" to refer to the unique
+    int16 ID;
+    uint32 Position;
+    uint8 MarkerNameLen;
+    uint8 MarkerNameStart;
+};
+#pragma pack(pop)
+
+struct converted_marker
+{
+    int16 ID; // For some reason .aif uses "ID" to refer to the unique
 			//    16-bit number assigned to each Marker, even though
 			//    in all other .aif contexts "ID" means "4-byte string"
     uint32 Position;
     uint8 MarkerNameLen;
-    char MarkerName[];
+    uint8 *MarkerNameStart;
+};
+
+#pragma pack(push,1)
+struct aif_marker_chunk
+{
+    char ID[ID_WIDTH];
+    int32 ChunkSize;
+    uint16 TotalMarkers;
+    uint8 MarkersStart;
 };
 #pragma pack(pop)
+
+struct converted_marker_chunk
+{
+    char ID[ID_WIDTH + 1];
+    int32 ChunkSize;
+    uint16 TotalMarkers;
+    uint8 *Aif_MarkersStart;
+    converted_marker *Converted_MarkersStart;
+};
+
 
 // Macro that represents the size of the first three items of an .aif Marker
 //    chunk. We use this later in computing the amount of memory
@@ -154,7 +201,7 @@ struct aif_marker
 //			     Aif_MarkerID       Position      MarkerNameLen
 #define MARKER_BOILERPLATE ( sizeof(int16) + sizeof(uint32) + sizeof(uint8) )
 
-struct loop
+struct converted_loop
 {
     int16 PlayMode;
     int16 BeginLoopMarker;
@@ -170,7 +217,7 @@ struct aif_loop
 };
 #pragma pack(pop)
 
-struct instrument_chunk
+struct converted_instrument_chunk
 {
     char ID[ID_WIDTH + 1];
     int32 ChunkSize;
@@ -181,8 +228,8 @@ struct instrument_chunk
     int8 LowVelocity;
     int8 HighVelocity;
     int16 Gain;
-    loop SustainLoop;
-    loop ReleaseLoop;
+    converted_loop SustainLoop;
+    converted_loop ReleaseLoop;
 };
 
 #pragma pack(push,1)
@@ -215,14 +262,26 @@ struct filler_chunk
 
 };
 
-struct sound_data_chunk
+struct converted_sound_data_chunk
 {
     char ID[ID_WIDTH + 1];
     int32 ChunkSize;
     uint32 Offset;
     uint32 BlockSize;
-    uint8 *SamplesStart;
+    uint8 *Aif_SamplesStart;
 };
+
+#pragma pack(push,1)
+struct aif_sound_data_chunk
+{
+    char ID[ID_WIDTH];
+    int32 ChunkSize;
+    uint32 Offset;
+    uint32 BlockSize;
+    uint8 SamplesStart;
+};
+#pragma pack(pop)
+
 
 struct generic_chunk_header
 {

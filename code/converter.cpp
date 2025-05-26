@@ -1,6 +1,7 @@
 #include "converter.h"
 #include "GPerfHash.c"
 
+
 void
 DebugPrintInt(int i)
 {
@@ -47,8 +48,45 @@ Win32_AllocateMemory(int MemSize, char *CallingFunction)
         OutputDebugStringA((char *)DebugPrintStringBuffer);
         exit(1);
     }
-
 }
+
+arena *
+ArenaAlloc(uint64 Size)
+{
+    arena *Arena = (arena *)Win32_AllocateMemory(Size, __func__);
+    Arena->ArenaSize = Size;
+    Arena->DoNotCrossThisLine = ( ((uint8 *)Arena + Arena->ArenaSize) - 1);
+    Arena->NextFreeByte = Arena->ArenaStart;
+    return(Arena);
+}
+
+void *
+ArenaPush(arena *Arena, uint64 Size)
+{
+    if( (Arena->NextFreeByte + Size) > Arena->DoNotCrossThisLine )
+    {
+	char DebugPrintStringBuffer[MAX_STRING_LEN];
+	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+		"\nERROR:\n\t"
+		"Push of %llu bytes to arena %s\n\t"
+		"exceeds %s's bounds\n",
+		Size, Stringize(Arena), Stringize(Arena)
+		);
+	OutputDebugStringA((char *)DebugPrintStringBuffer);
+	exit(1);
+    }
+    else
+    {
+	void *TheBytesMyLordHathRequested = (void *)Arena->NextFreeByte;
+	Arena->NextFreeByte += Size;
+	return(TheBytesMyLordHathRequested);
+    }
+} 
+
+#define MAX_UNIMPORTANT_CHUNKS 25
+
+#define PushArray(Arena, Type, Count) ( (Type *)ArenaPush( (Arena), sizeof(Type)*(Count) ) )
+#define PushStruct(Arena, Type) PushArray(Arena, Type, 1)
 
 // Generic function that we use to advance a pointer through the
 //    file by computing sum of the "StartingByte", for example, the
@@ -174,7 +212,10 @@ AreIntsTheSame(int IntToCheck, int IntToCheckAgainst)
 }
 
 inline void
-ValidateInteger(int IntToCheck, int IntToCheckAgainst, char *CallingFunction)
+ValidateInteger(int IntToCheck, 
+	    	int IntToCheckAgainst, 
+		char *CallingFunction, 
+		char *Variable)
 {
     if(!AreIntsTheSame(IntToCheck, IntToCheckAgainst))
     {
@@ -183,17 +224,19 @@ ValidateInteger(int IntToCheck, int IntToCheckAgainst, char *CallingFunction)
                 "\nERROR:\n\t"
                 "In function"
                 "\n\t\t%s"
+                "for variable"
+                "\n\t\t%s"
                 "\n\texpected to read integer" 
                 "\n\t\t%d"
                 "\n\tbut instead read\n\t\t%d\n", 
-                CallingFunction, IntToCheck, IntToCheckAgainst);
+                CallingFunction, Variable, IntToCheck, IntToCheckAgainst);
         OutputDebugStringA((char *)DebugPrintStringBuffer);
         exit(1);
     }
 }
 
 inline void
-ValidateIntegerRange(int IntToCheck, int LowerBound, int UpperBound, char *CallingFunction)
+ValidateIntegerRange(int IntToCheck, int LowerBound, int UpperBound, char *Variable, char *CallingFunction)
 {
     if( !( (LowerBound <= IntToCheck) && (IntToCheck <= UpperBound) ) )
     {
@@ -202,13 +245,15 @@ ValidateIntegerRange(int IntToCheck, int LowerBound, int UpperBound, char *Calli
                 "\nERROR:\n\t"
                 "In function"
                 "\n\t\t%s"
-                "\n\tinteger" 
+                "\n\tfor integer variable" 
+                "\n\t\t%s"
+                "\n\tvalue of" 
                 "\n\t\t%d"
                 "\n\twas not within expected bounds of"
                 "\n\t\t%d"
                 "\n\tand" 
                 "\n\t\t%d", 
-                CallingFunction, IntToCheck, LowerBound, UpperBound);
+                CallingFunction, Variable, IntToCheck, LowerBound, UpperBound);
         OutputDebugStringA((char *)DebugPrintStringBuffer);
         exit(1);
     }
@@ -244,8 +289,8 @@ ValidatePointer(uint8 *PointerToCheck, char *CallingFunction)
 //    meets the .aif spec
 void
 ValidateAif(int CountOfEachChunkType[], 
-            common_chunk *CommonChunk, 
-            sound_data_chunk *SoundDataChunk)
+            converted_common_chunk *CommonChunk, 
+            converted_sound_data_chunk *SoundDataChunk)
 {
     
     // There must be one and only one Common chunk
@@ -500,23 +545,9 @@ GetSampleRate(uint8 *FirstByteOfExtendedPrecisionFloat)
     return(Fraction);
 }
 
-// Functions named with the pattern "App_Parse_Aif_Chunk" read the 
-//    header information of the .aif file we put on the heap 
-//    and store its relevant data in structs on the stack.
-//
-//    We later use these data to output a .wav file.
-//    
-//    The Form Chunk parsing function is the first one 
-//    to be called because, per the spec, all .aif files 
-//    begin with Form Chunks. 
-//
-//    It is heavily annotated for clarity; 
-//    other "App_Parse_Aif_Chunk" functions are not because they 
-//    generally follow the patttern established here.
-
-int
+void
 ParseFormChunk(uint8 *Aif_FormChunk_Start, 
-		form_chunk *Converted_FormChunk, 
+		converted_form_chunk *Converted_FormChunk, 
 		int64 Aif_FileSize)
 {
     int BytesRead = 0;
@@ -533,140 +564,43 @@ ParseFormChunk(uint8 *Aif_FormChunk_Start,
     // The ChunkSize of the Form chunk should be equal to the total size of the
     //	  file, less the number of bytes we've read so far
     ValidateInteger(Converted_FormChunk->ChunkSize, 
-		    (Aif_FileSize - BytesRead),
-		    __func__);
+		    (Aif_FileSize - BytesRead), __func__,
+		    Stringize(Converted_FormChunk->ChunkSize));
 
     // Read the FormType field
     ReadID(Aif_FormChunk->FormType, Converted_FormChunk->FormType);
-    BytesRead += sizeof(ID_WIDTH);
+
+    // Pointer to the where the file's data actually begins
+    Converted_FormChunk->Aif_SubChunksStart = &Aif_FormChunk->SubChunksStart;
 
     // Per .aif spec ID must be FORM or file is invalid
     ValidateID(Converted_FormChunk->ID, "FORM", __func__);
 
     // Per .aif spec FormType must be AIFF or file is invalid
     ValidateID(Converted_FormChunk->FormType, "AIFF", __func__);
-
-    return(BytesRead);
 }
 
-#if 0
-int
-ParseFormChunk(uint8 *Aif_FormChunk_Start, form_chunk *FormChunk)
+void
+ParseCommonChunk(uint8 *Aif_CommonChunk_Start, converted_common_chunk *Converted_CommonChunk)
 {
-    // We return the number of bytes this function read from the 
-    //	  .aif file so main() knows how many bytes to skip to get to 
-    //	  the next chunk in the .aif file
-    int32 BytesRead = 0;
+    aif_common_chunk *Aif_CommonChunk = (aif_common_chunk *)Aif_CommonChunk_Start;
+    ReadID(Aif_CommonChunk->ID, Converted_CommonChunk->ID);
 
-    // Declare a pointer to a single byte that we use to advance 
-    //	  through the chunk and parse its data
-    uint8 *Aif_Index = Aif_FormChunk_Start;
+    Converted_CommonChunk->ChunkSize = FlipEndianness(Aif_CommonChunk->ChunkSize);
+    Converted_CommonChunk->NumChannels = FlipEndianness(Aif_CommonChunk->NumChannels);
+    Converted_CommonChunk->NumSampleFrames = FlipEndianness(Aif_CommonChunk->NumSampleFrames);
+    Converted_CommonChunk->SampleSize = FlipEndianness(Aif_CommonChunk->SampleSize);
+    Converted_CommonChunk->SampleRate = GetSampleRate((uint8 *)&Aif_CommonChunk->SampleRate);
 
-    // These App_Parse_Aif_...Chunk functions do not represent a large
-    //	  share of the program's workload, so for readability,
-    //	  we always declare a new pointer to each header item
-    //	  as we encounter it, that explicitly names what it points to...
-    char *Aif_FormChunk_IDStart = (char *)Aif_Index;
+    // We only support sample rates that are multiples of 100
+    ValidateInteger((Converted_CommonChunk->SampleRate % 100), 
+		    0, __func__, 
+		    Stringize(Converted_CommonChunk->SampleRate % 100));
 
-    // ...and pass this pointer to a corresponding function
-    //	  that parses it and stores its relevant data on the stack.
-    ReadID(Aif_FormChunk_IDStart, (char *)(&FormChunk->ID));
-
-    // Since all ID fields for a given chunk are known 
-    //	  at compile time, we check all IDs to confirm
-    //	  that we read what we expected to read.
-    // 
-    //	  Per .aif spec, Form Chunk ID is always "FORM"
-    ValidateID(FormChunk->ID, "FORM", __func__);
-
-    // After confirming that we read valid data, we compute the number
-    //	  of bytes read from this chunk so far...
-    BytesRead += ID_WIDTH;
-
-
-    // ...and pass this total, along with the address of the first byte
-    //	  of the chunk, to compute the address of the next datum
-    //	  to be read.
-    Aif_Index = AdvancePointer(Aif_FormChunk_Start, BytesRead);
-
-    // and we keep doing this until we've finished parsing the chunk!
-    int32 *Aif_FormChunk_ChunkSizeAddress = (int32 *)Aif_Index;
-    FormChunk->ChunkSize = FlipEndianness(*Aif_FormChunk_ChunkSizeAddress);
-    BytesRead += sizeof(FormChunk->ChunkSize);
-
-    Aif_Index = AdvancePointer(Aif_FormChunk_Start, BytesRead);
-    char *Aif_FormChunk_FormType_Start = (char *)Aif_Index;
-    ReadID(Aif_FormChunk_FormType_Start, (char *)(FormChunk->FormType));
-
-    // Per .aif spec, Form Chunk Type is always "AIFF"
-    ValidateID(FormChunk->FormType, "AIFF", __func__);
-    BytesRead += ID_WIDTH;
-
-    // The "data" of the Form Chunk is everything else
-    //	  in the entire aif file.
-    Aif_Index = AdvancePointer(Aif_FormChunk_Start, BytesRead);
-    uint8 *Aif_FormChunk_DataStart = Aif_Index;
-    FormChunk->SubChunksStart;
-
-    return(BytesRead);
-}
-#endif
-
-int
-ParseCommonChunk(uint8 *Aif_CommonChunk_Start, common_chunk *CommonChunk)
-{
-
-    // Keep track of number of bytes we've read so that
-    //	  we can compute necessary offsets
-    int32 BytesRead = 0;
-
-    // Declare a pointer that we use to keep track of our position
-    //	  in the .aif file as we copy the data
-    uint8 *Aif_Index = Aif_CommonChunk_Start;
-
-    // Store the Common Chunk ID in its struct on the stack
-    char *Aif_CommonChunk_IDStart = (char *)Aif_Index;
-    ReadID(Aif_CommonChunk_IDStart, (char *)CommonChunk->ID);
-    // Check that we read a valid ID
-    ValidateID(CommonChunk->ID, "COMM", __func__);
-    // Compute updated BytesRead value
-    BytesRead += ID_WIDTH;
-
-    // Store the size of the Common Chunk
-    Aif_Index = AdvancePointer(Aif_CommonChunk_Start, BytesRead);
-    int32 *Aif_CommonChunk_ChunkSizeAddress = (int32 *)Aif_Index;
-    CommonChunk->ChunkSize = FlipEndianness(*Aif_CommonChunk_ChunkSizeAddress);
-    // per the spec, ChunkSize is always 18
-    ValidateInteger(CommonChunk->ChunkSize, 18, __func__);
-    BytesRead += sizeof(CommonChunk->ChunkSize);
-
-    // Store the number of audio channels
-    Aif_Index = AdvancePointer(Aif_CommonChunk_Start, BytesRead);
-    int16 *Aif_CommonChunk_NumChannels = (int16 *)Aif_Index;
-    CommonChunk->NumChannels = FlipEndianness(*Aif_CommonChunk_NumChannels);
-    BytesRead += sizeof(CommonChunk->NumChannels);
-
-    // Store the number of sample frames
-    Aif_Index = AdvancePointer(Aif_CommonChunk_Start, BytesRead);
-    uint32 *Aif_CommonChunk_NumSampleFrames = (uint32 *)Aif_Index;
-    CommonChunk->NumSampleFrames = FlipEndianness(*Aif_CommonChunk_NumSampleFrames);
-    BytesRead += sizeof(CommonChunk->NumSampleFrames);
-
-    // Store the sample size (the number of bytes dedicated to each sample)
-    Aif_Index = AdvancePointer(Aif_CommonChunk_Start, BytesRead);
-    int16 *Aif_CommonChunk_SampleSize = (int16 *)Aif_Index;
-    CommonChunk->SampleSize = FlipEndianness(*Aif_CommonChunk_SampleSize);
-    BytesRead += sizeof(CommonChunk->SampleSize);
-
-    // .aif files use a 10-byte, extended-width floating point number
-    //	  to represent sample rate. See comments on the GetSampleRate
-    //	  function for details.
-    Aif_Index = AdvancePointer(Aif_CommonChunk_Start, BytesRead);
-    uint8 *Aif_CommonChunk_SampleRate = Aif_Index;
-    CommonChunk->SampleRate = GetSampleRate(Aif_CommonChunk_SampleRate);
-    BytesRead += EXTENDED_WIDTH;
-
-    return(BytesRead);
+    // SampleSize can be any number between 1 and 32 per .aif spec
+    ValidateIntegerRange(Converted_CommonChunk->SampleSize, 
+			1, 32, __func__, 
+			Stringize(Converted_CommonChunk->SampleSize));
 }
 
 // .aif files may need to specify the position of certain samples in the file
@@ -678,145 +612,92 @@ ParseCommonChunk(uint8 *Aif_CommonChunk_Start, common_chunk *CommonChunk)
 //
 //    For readability, we first parse the header portion of the Marker chunk,
 //    then parse the actual Marker data in a separate function.
-int
-ParseMarkerChunk(uint8 *Aif_MarkerChunk, marker_chunk *Converted_MarkerChunk, 
-			uint8 **Aif_MarkersData_Start)
+void
+ParseMarkerChunk(uint8 *Aif_MarkerChunk_Start, converted_marker_chunk *Converted_MarkerChunk)
 {
+    aif_marker_chunk *Aif_MarkerChunk = (aif_marker_chunk *)Aif_MarkerChunk_Start;
+    ReadID(Aif_MarkerChunk->ID, Converted_MarkerChunk->ID);
 
-    // Keep track of number of bytes we've read so that
-    //	  we can compute necessary offsets
-    int32 BytesRead = 0;
-    uint8 *Aif_Index = Aif_MarkerChunk;
+    Converted_MarkerChunk->ChunkSize = FlipEndianness(Aif_MarkerChunk->ChunkSize);
+    Converted_MarkerChunk->TotalMarkers = FlipEndianness(Aif_MarkerChunk->TotalMarkers);
+    Converted_MarkerChunk->Aif_MarkersStart = &Aif_MarkerChunk->MarkersStart;
 
-    // Store the Marker Chunk ID in its struct in memory
-    char *Aif_MarkerChunk_HeaderIDStart = (char *)Aif_Index;
-    ReadID(Aif_MarkerChunk_HeaderIDStart, Converted_MarkerChunk->ID);
-    // Check that we read a valid ID
-    ValidateID(Converted_MarkerChunk->ID, "MARK", __func__);
-    // Compute updated BytesRead value
-    BytesRead += ID_WIDTH;
-
-    // Store the size of the Marker Chunk
-    Aif_Index = AdvancePointer(Aif_MarkerChunk, BytesRead);
-    int32 *Aif_MarkerChunk_Size = (int32 *)Aif_Index;
-    Converted_MarkerChunk->Size = FlipEndianness(*Aif_MarkerChunk_Size);
-    BytesRead += sizeof(Converted_MarkerChunk->Size);
-
-    // Store the number of Markers. We use this value later to know
-    //	  how much space to put on the heap to store them
-    Aif_Index = AdvancePointer(Aif_MarkerChunk, BytesRead);
-    uint16 *Aif_MarkerChunk_HeaderTotalMarkers = (uint16 *)Aif_Index;
-    Converted_MarkerChunk->TotalMarkers = FlipEndianness(*Aif_MarkerChunk_HeaderTotalMarkers);
-    BytesRead += sizeof(Converted_MarkerChunk->TotalMarkers);
-    Aif_Index = AdvancePointer(Aif_MarkerChunk, BytesRead);
-
-    // Aif_Index now points at the first Marker, so we grab its address so 
-    //	  the separate function that actually parses the markers knows where
-    //	  to start
-    *Aif_MarkersData_Start = Aif_Index;
-
-    return(BytesRead);
+    // May as well initialize this to 0 here
+    Converted_MarkerChunk->Converted_MarkersStart = 0;
 }
 
-// In this function we figure out how many bytes to allocate in memory for
-//    converted versions of the Markers.
-//    
-//    Markers in .aif files use Pascal-style strings for their Name field.
-//    i.e., Instead of terminating strings with the null char, the first byte of
-//    the Marker's name is an int that represents the number of one-byte chars 
-//    in the string. The function below refers to this int as "StringLen".
-//
-//    In all other respects, Marker chunk fields have uniform
-//    sizes. In the function below, this uniform number of bytes per marker
-//    is represented as MARKER_BOILERPLATE.
-//
-//    Therefore, the number of required bytes will be equal to:
-//	  (MARKER_BOILERPLATE * Number of Markers)
-//			    +
-//	  Sum of the StringLen fields for Markers
-int
-GetNumBytesToStoreConverted_Markers(uint8 *Aif_MarkersData_Start, int32 TotalMarkers)
+void
+ParseMarkers(converted_marker_chunk *Converted_MarkerChunk, arena *Arena, uint32 NumSampleFrames)
 {
-    int BytesNeededToStoreMarkers = 0;
+    uint8 *Aif_MarkerPointer = Converted_MarkerChunk->Aif_MarkersStart;
+    converted_marker *Converted_Markers = Converted_MarkerChunk->Converted_MarkersStart;
 
-    uint8 *Aif_Index = Aif_MarkersData_Start;
-    for(int i = 0; i < TotalMarkers; i++)
+    int16 *MarkerIDsSeen = PushArray(Arena, int16, Converted_MarkerChunk->TotalMarkers);
+
+    for(int i = 0; i < Converted_MarkerChunk->TotalMarkers; i++)
     {
-	aif_marker *ThisMarker = (aif_marker *)Aif_Index;
-	BytesNeededToStoreMarkers += MARKER_BOILERPLATE;
-	BytesNeededToStoreMarkers += ThisMarker->MarkerNameLen;
+	aif_marker *ThisAif_Marker = (aif_marker *)Aif_MarkerPointer;
+	converted_marker ThisConverted_Marker = Converted_Markers[i];
 
-	// Skip over the MarkerName string to the start of the next Marker
-	Aif_Index = (uint8 *)ThisMarker->MarkerName;
-	Aif_Index += ThisMarker->MarkerNameLen;
+	ThisConverted_Marker.ID = FlipEndianness(ThisAif_Marker->ID);
+	MarkerIDsSeen[i] = ThisConverted_Marker.ID;
+
+	// Per .aif spec, ID must be a "positive, nonzero" (??) integer,
+	//    even though the spec defines the ID field's type to be
+	//    a SIGNED int16. We do our best to validate, anyway...
+	int Int16UpperBound = 0x7FFF;
+	ValidateIntegerRange((int)ThisConverted_Marker.ID, 1, Int16UpperBound,
+				Stringize(ThisConverted_Marker.ID), __func__);
+
+	ThisConverted_Marker.Position = FlipEndianness(ThisAif_Marker->Position);
+
+	// ThisConverted_Marker.Position is an offset into the array of sample 
+	//     frames in the .aif file that comprise the actual sound to be played, 
+	//     so logically, it should never be higher than the number of total
+	//     sample frames the file declares in its Common chunk
+	ValidateIntegerRange((int)ThisConverted_Marker.Position, 0, 
+				(NumSampleFrames),
+				Stringize(ThisConverted_Marker.ID), __func__);
+
+	ThisConverted_Marker.MarkerNameLen = ThisAif_Marker->MarkerNameLen;
+
+	ThisConverted_Marker.MarkerNameStart = PushArray(Arena, uint8, 
+						ThisConverted_Marker.MarkerNameLen);
+	SteenCopy(&ThisAif_Marker->MarkerNameStart, 
+		    ThisConverted_Marker.MarkerNameStart, 
+		    (int)ThisConverted_Marker.MarkerNameLen);
+	
+	// Skip to the next Marker in the .aif file
+	Aif_MarkerPointer = (uint8 *)(&ThisAif_Marker->MarkerNameStart + 
+				ThisAif_Marker->MarkerNameLen);
     }
     
-    return(BytesNeededToStoreMarkers);
-}
-
-int32
-ParseMarkers(uint8 *Aif_MarkersData_Start, 
-        marker_chunk *Converted_MarkerChunk, int BytesAllocatedForMarkers)
-{
-    int32 BytesRead = 0;
-    int32 BytesWritten = 0;
-    uint8 *Aif_Index = (uint8 *)Aif_MarkersData_Start;
-    uint8 *Converted_Index = Converted_MarkerChunk->Markers;
-
-    for(int MarkerNumber = 0; 
-	    MarkerNumber < Converted_MarkerChunk->TotalMarkers;
-	    MarkerNumber++)
+    // We verify that each Marker's ID was unique to confirm that 
+    //	  the file meets spec. This loop is O(n^2) but it should never 
+    //	  run more than a dozen or so times ... nerd
+    for(int i = 0; i < Converted_MarkerChunk->TotalMarkers; i++)
     {
-	Aif_Index = AdvancePointer(Aif_MarkersData_Start, BytesRead);
-	Converted_Index = AdvancePointer(Converted_MarkerChunk->Markers, BytesRead);
-	int16 *Aif_MarkerID = (int16 *)Aif_Index;
-	int16 *Converted_MarkerID = (int16 *)Converted_Index;
-	*Converted_MarkerID = FlipEndianness(*Aif_MarkerID);
-	BytesWritten += sizeof(*Converted_MarkerID);
-	Assert(BytesWritten <= BytesAllocatedForMarkers);
-
-	// Per the .aif spec, the ID must be a positive integer
-	ValidateIntegerRange(*Converted_MarkerID, 0, INT_MAX, __func__);
-	BytesRead += sizeof(*Converted_MarkerID);
-
-	// Read the Marker position
-	Aif_Index = AdvancePointer(Aif_MarkersData_Start, BytesRead);
-	Converted_Index = AdvancePointer(Converted_MarkerChunk->Markers, BytesRead);
-	uint32 *Aif_MarkerPosition = (uint32 *)Aif_Index;
-	uint32 *Converted_MarkerPosition = (uint32 *)Converted_Index;
-	*Converted_MarkerPosition = FlipEndianness(*Aif_MarkerPosition);
-	BytesWritten += sizeof(*Converted_MarkerPosition);
-	Assert(BytesWritten <= BytesAllocatedForMarkers);
-	BytesRead += sizeof(*Converted_MarkerPosition);
-
-	// Read the length of the string containing the Marker's name 
-	Aif_Index = AdvancePointer(Aif_MarkersData_Start, BytesRead);
-	Converted_Index = AdvancePointer(Converted_MarkerChunk->Markers, BytesRead);
-	// This is just an 8-bit uint, so we don't have to flip endianness
-	uint8 *Aif_MarkerNameStringLen = (uint8 *)Aif_Index;
-	uint8 *Converted_MarkerNameStringLen = (uint8 *)Converted_Index;
-	*Converted_MarkerNameStringLen = *Aif_MarkerNameStringLen;
-	BytesWritten += sizeof(*Converted_MarkerNameStringLen);
-	Assert(BytesWritten <= BytesAllocatedForMarkers);
-	BytesRead += sizeof(*Converted_MarkerNameStringLen);
-
-	// Read the string containing the Marker's name
-	Aif_Index = AdvancePointer(Aif_MarkersData_Start, BytesRead);
-	Converted_Index = AdvancePointer(Converted_MarkerChunk->Markers, BytesRead);
-	// Strings don't need their endianness flipped, so we just do a straight copy
-	BytesWritten += SteenCopy(Aif_Index, 
-				    Converted_Index, 
-				    (int)*Converted_MarkerNameStringLen);
-	Assert(BytesWritten <= BytesAllocatedForMarkers);
-	// Increment BytesRead by the number of bytes in the string
-	BytesRead += *Converted_MarkerNameStringLen;
+	int ThisMarkerID = (int)MarkerIDsSeen[i];
+	for(int j = (i+1); j < Converted_MarkerChunk->TotalMarkers; j++)
+	{
+	    int IDToCompare = (int)MarkerIDsSeen[j];
+	    if(IDToCompare == ThisMarkerID)
+	    {
+		char DebugPrintStringBuffer[MAX_STRING_LEN];
+		sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+		"\nERROR:\n\t"
+		"\n\t\tThis .aif file's Markers do not have unique IDs,"
+		"\n\t\twhich violates the .aif specification."
+		"\n\nThis program will now exit.");
+		OutputDebugStringA((char *)DebugPrintStringBuffer);
+		exit(1);
+	    }
+	}
     }
-
-    return(BytesRead);
 }
 
 int
-ParseInstrumentChunk(uint8 *Aif_InstrumentChunk_Start, instrument_chunk *Converted_InstrumentChunk)
+ParseInstrumentChunk(uint8 *Aif_InstrumentChunk_Start, converted_instrument_chunk *Converted_InstrumentChunk)
 {
     int BytesRead = 0;
     aif_instrument_chunk *Aif_InstrumentChunk = (aif_instrument_chunk *)Aif_InstrumentChunk_Start;
@@ -845,19 +726,33 @@ ParseInstrumentChunk(uint8 *Aif_InstrumentChunk_Start, instrument_chunk *Convert
 		FlipEndianness(Aif_InstrumentChunk->ReleaseLoop.EndLoopMarker);
 
     // Chunk size is always 20 per .aif spec
-    ValidateInteger(Converted_InstrumentChunk->ChunkSize, 20, __func__);
+    ValidateInteger(Converted_InstrumentChunk->ChunkSize, 
+		    20, __func__,
+		    Stringize(Converted_InstrumentChunk->ChunkSize));
 
     // Detune value is between -50 and 50 per .aif spec
-    ValidateIntegerRange(Converted_InstrumentChunk->Detune, -50, 50, __func__);
+    ValidateIntegerRange(Converted_InstrumentChunk->Detune, 
+			-50, 50, 
+			Stringize(Converted_InstrumentChunk->Detune), __func__);
 
     // LowNote, HighNote, LowVelocity, HighVelocity are MIDI note values and 
     //	  must be between 1 and 127 per .aif spec
-    ValidateIntegerRange(Converted_InstrumentChunk->LowNote, 1, 127, __func__);
-    ValidateIntegerRange(Converted_InstrumentChunk->HighNote, 1, 127, __func__);
-    ValidateIntegerRange(Converted_InstrumentChunk->LowVelocity, 1, 127, __func__);
-    ValidateIntegerRange(Converted_InstrumentChunk->HighVelocity, 1, 127, __func__);
-
-
+    ValidateIntegerRange(Converted_InstrumentChunk->LowNote, 
+			1, 127, 
+			Stringize(Converted_InstrumentChunk->LowNote), 
+			__func__);
+    ValidateIntegerRange(Converted_InstrumentChunk->HighNote, 
+			1, 127, 
+			Stringize(Converted_InstrumentChunk->HighNote),
+			__func__);
+    ValidateIntegerRange(Converted_InstrumentChunk->LowVelocity, 
+			1, 127, 
+			Stringize(Converted_InstrumentChunk->LowVelocity),
+			__func__);
+    ValidateIntegerRange(Converted_InstrumentChunk->HighVelocity, 
+			1, 127, 
+			Stringize(Converted_InstrumentChunk->HighVelocity),
+			__func__);
     return(BytesRead);
 }
 
@@ -899,41 +794,32 @@ ParseFillerChunk(uint8 *Aif_FillerChunk_Start, filler_chunk *FillerChunk)
     return(BytesRead);
 }
 
-int 
-ParseSoundDataChunk(uint8 *Aif_SoundDataChunk_Start, sound_data_chunk *SoundDataChunk)
+void 
+ParseSoundDataChunk(uint8 *Aif_SoundDataChunk_Start, converted_sound_data_chunk *Converted_SoundDataChunk)
 {
+    aif_sound_data_chunk *Aif_SoundDataChunk = (aif_sound_data_chunk *)Aif_SoundDataChunk_Start;
+    ReadID(Aif_SoundDataChunk->ID, Converted_SoundDataChunk->ID);
 
-    int BytesRead = 0;
+    Converted_SoundDataChunk->ChunkSize = FlipEndianness(Aif_SoundDataChunk->ChunkSize);
+    Converted_SoundDataChunk->Offset = FlipEndianness(Aif_SoundDataChunk->Offset);
+    Converted_SoundDataChunk->BlockSize = FlipEndianness(Aif_SoundDataChunk->BlockSize);
+    Converted_SoundDataChunk->Aif_SamplesStart = &Aif_SoundDataChunk->SamplesStart;
 
-    uint8 *Aif_Index = Aif_SoundDataChunk_Start;
+    // Per .aif spec, 
+    //	  "most applications won't use Offset and should set it to zero", 
+    //	  so that's what we assume
+    ValidateInteger(Converted_SoundDataChunk->Offset, 
+		    0, __func__, 
+		    Stringize(Converted_SoundDataChunk->Offset));
 
-    char *Aif_SoundDataChunk_Header_IDStart = (char *)Aif_Index;
-    ReadID(Aif_SoundDataChunk_Header_IDStart, SoundDataChunk->ID);
-    BytesRead += ID_WIDTH;
-
-    Aif_Index = AdvancePointer(Aif_SoundDataChunk_Start, BytesRead);
-    int32 *Aif_SoundDataChunk_Header_Size = (int32 *)Aif_Index;
-    SoundDataChunk->ChunkSize = FlipEndianness(*Aif_SoundDataChunk_Header_Size);
-    BytesRead += sizeof(SoundDataChunk->ChunkSize);
-
-    Aif_Index = AdvancePointer(Aif_SoundDataChunk_Start, BytesRead);
-    uint32 *Aif_SoundDataChunk_Header_Offset = (uint32 *)Aif_Index;
-    SoundDataChunk->Offset = FlipEndianness(*Aif_SoundDataChunk_Header_Offset);
-    BytesRead += sizeof(SoundDataChunk->Offset);
-
-    Aif_Index = AdvancePointer(Aif_SoundDataChunk_Start, BytesRead);
-    uint32 *SoundDataChunk_Header_BlockSize = (uint32 *)Aif_Index;
-    SoundDataChunk->BlockSize = FlipEndianness(*SoundDataChunk_Header_BlockSize);
-    BytesRead += sizeof(SoundDataChunk->BlockSize);
-
-    Aif_Index = AdvancePointer(Aif_SoundDataChunk_Start, BytesRead);
-    SoundDataChunk->SamplesStart = Aif_Index;
-
-    return(BytesRead);
+    // Same as Offset
+    ValidateInteger(Converted_SoundDataChunk->BlockSize, 
+		    0, __func__, 
+		    Stringize(Converted_SoundDataChunk->BlockSize));
 }
 
 int
-FlipSampleEndianness16Bits(common_chunk *CommonChunk, uint8 *LittleEndianSamplesStart, 
+FlipSampleEndianness16Bits(converted_common_chunk *CommonChunk, uint8 *LittleEndianSamplesStart, 
 			    uint8 *BigEndianSamplesStart)
 {
     // Variables we use to keep track of where we are in the loop
@@ -977,7 +863,7 @@ FlipSampleEndianness16Bits(common_chunk *CommonChunk, uint8 *LittleEndianSamples
 }
 
 int
-FlipSampleEndianness24Bits(common_chunk *CommonChunk, uint8 *LittleEndianSamplesStart, 
+FlipSampleEndianness24Bits(converted_common_chunk *CommonChunk, uint8 *LittleEndianSamplesStart, 
 			    uint8 *BigEndianSamplesStart)
 {
     // Variables we use to keep track of where we are in the loop
@@ -1025,7 +911,6 @@ FlipSampleEndianness24Bits(common_chunk *CommonChunk, uint8 *LittleEndianSamples
 		ThirdByteOfSamplePoint ^ Bitmask;
             BytesWritten++;
         }
-
     }
 
     return(BytesWritten);

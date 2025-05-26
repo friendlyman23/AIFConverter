@@ -5,59 +5,6 @@
 #include "converter.h"
 #include "converter.cpp"
 
-#define MAX_UNIMPORTANT_CHUNKS 25
-
-struct arena
-{
-    uint64 ArenaSize;
-    uint8 *DoNotCrossThisLine;
-    uint8 *NextFreeByte;
-    uint8 ArenaStart[];
-};
-
-struct chunk_finder
-{
-    chunk HashedID;
-    uint8 *Aif_Chunk;
-    uint8 *Converted_Chunk;
-};
-
-arena *
-ArenaAlloc(uint64 Size)
-{
-    arena *Arena = (arena *)Win32_AllocateMemory(Size, __func__);
-    Arena->ArenaSize = Size;
-    Arena->DoNotCrossThisLine = ( ((uint8 *)Arena + Arena->ArenaSize) - 1);
-    Arena->NextFreeByte = Arena->ArenaStart;
-    return(Arena);
-}
-
-void *
-ArenaPush(arena *Arena, uint64 Size)
-{
-    if( (Arena->NextFreeByte + Size) > Arena->DoNotCrossThisLine )
-    {
-	char DebugPrintStringBuffer[MAX_STRING_LEN];
-	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
-		"\nERROR:\n\t"
-		"Push of %llu bytes to arena %s\n\t"
-		"exceeds %s's bounds\n",
-		Size, Stringize(Arena), Stringize(Arena)
-		);
-	OutputDebugStringA((char *)DebugPrintStringBuffer);
-	exit(1);
-    }
-    else
-    {
-	void *TheBytesMyLordHathRequested = (void *)Arena->NextFreeByte;
-	Arena->NextFreeByte += Size;
-	return(TheBytesMyLordHathRequested);
-    }
-} 
-
-#define PushArray(Arena, Type, Count) ( (Type *)ArenaPush( (Arena), sizeof(Type)*(Count) ) )
-#define PushStruct(Arena, Type) PushArray(Arena, Type, 1)
-
 int WinMain(HINSTANCE Instance, 
         HINSTANCE PrevInstance, 
         PSTR CmdLine, 
@@ -95,10 +42,10 @@ int WinMain(HINSTANCE Instance,
 
     // Every .aif file that meets spec starts with a Form chunk; if we don't
     //	  find it, the Form chunk parsing function exits the program
-    form_chunk *Converted_FormChunk = PushStruct(Scratchpad, form_chunk);
+    converted_form_chunk *Converted_FormChunk = PushStruct(Scratchpad, converted_form_chunk);
     int64 Aif_FileSize_IntVersion = (int64) Aif_FileSize.QuadPart;
-    int BytesReadInFormChunk = ParseFormChunk(Aif_FileIndex, Converted_FormChunk, Aif_FileSize_IntVersion);
-    Aif_FileIndex = AdvancePointer(Aif_FileStart, BytesReadInFormChunk);
+    ParseFormChunk(Aif_FileIndex, Converted_FormChunk, Aif_FileSize_IntVersion);
+    Aif_FileIndex = Converted_FormChunk->Aif_SubChunksStart;
 
     // Excepting a very few edge cases, .aif files that meet spec will 
     //	  almost always have one Common chunk and one Sound Data chunk 
@@ -109,13 +56,13 @@ int WinMain(HINSTANCE Instance,
     //	  hereafter referred to as "UNimportant chunks").
 
     // 
-    uint8 *LastByteInFile = (uint8 *)(Aif_FileStart + Aif_FileSize);
+    uint8 *LastByteInFile = (uint8 *)( (Aif_FileStart + Aif_FileSize_IntVersion) - 1);
 
     // We're gonna need the Common and Sound Data chunks if the .aif file meets 
     //	  spec, so just allocate for them here and then we can parse them as soon as
     //	  we find them in the while loop below
-    common_chunk *Converted_CommonChunk = PushStruct(Scratchpad, common_chunk);
-    sound_data_chunk *Converted_SoundDataChunk = PushStruct(Scratchpad, sound_data_chunk);
+    converted_common_chunk *Converted_CommonChunk = PushStruct(Scratchpad, converted_common_chunk);
+    converted_sound_data_chunk *Converted_SoundDataChunk = PushStruct(Scratchpad, converted_sound_data_chunk);
     
     // We'll likely find unimportant chunks too, but we don't parse them until
     //	  after we've done our initial scan and validated the file. So for now
@@ -126,7 +73,7 @@ int WinMain(HINSTANCE Instance,
 
 
     // Scan the .aif file
-    while(Aif_FileIndex < LastByteInFile)
+    while(Aif_FileIndex <= LastByteInFile)
     {
 	// Figure out which chunk we're looking at
 	generic_chunk_header *Aif_ThisChunksHeader = (generic_chunk_header *)Aif_FileIndex;
@@ -212,27 +159,22 @@ int WinMain(HINSTANCE Instance,
 	{
 	    case MARKER_CHUNK:
 	    {
-		marker_chunk *Converted_MarkerChunk = PushStruct(Scratchpad, marker_chunk);
+		converted_marker_chunk *Converted_MarkerChunk = PushStruct(Scratchpad, converted_marker_chunk);
 		ChunkFinder[i].Converted_Chunk = (uint8 *)Converted_MarkerChunk;
-		uint8 *Aif_MarkersData_Start = 0;
-		ParseMarkerChunk(ThisChunk.Aif_Chunk, Converted_MarkerChunk, &Aif_MarkersData_Start);
+		ParseMarkerChunk(ThisChunk.Aif_Chunk, Converted_MarkerChunk);
 		if(Converted_MarkerChunk->TotalMarkers > 0)
 		{
-		    int NumBytesForConverted_Markers = 
-			GetNumBytesToStoreConverted_Markers(Aif_MarkersData_Start, 
-							    Converted_MarkerChunk->TotalMarkers);
-		    Converted_MarkerChunk->Markers = PushArray(Scratchpad, 
-								uint8, NumBytesForConverted_Markers);
-		    ParseMarkers(Aif_MarkersData_Start, 
-				Converted_MarkerChunk, 
-				NumBytesForConverted_Markers);
+		    Converted_MarkerChunk->Converted_MarkersStart = 
+				PushArray(Scratchpad, converted_marker, 
+					    Converted_MarkerChunk->TotalMarkers);
+		    ParseMarkers(Converted_MarkerChunk, Scratchpad, Converted_CommonChunk->NumSampleFrames);
 		}
 	    } break;
 
 	    case INSTRUMENT_CHUNK:
 	    {
-		instrument_chunk *Converted_InstrumentChunk = 
-				    PushStruct(Scratchpad, instrument_chunk);
+		converted_instrument_chunk *Converted_InstrumentChunk = 
+				    PushStruct(Scratchpad, converted_instrument_chunk);
 		ChunkFinder[i].Converted_Chunk = (uint8 *)Converted_InstrumentChunk;
 		ParseInstrumentChunk(ThisChunk.Aif_Chunk, Converted_InstrumentChunk);
 	    } break;
@@ -256,17 +198,11 @@ int WinMain(HINSTANCE Instance,
 		exit(1);
 
 	    } break;
-
 	}
     }
 
-
-
-
-
-
-
     // Output .wav
+    // stop: last step is to output .wav file
 
     
 

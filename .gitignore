@@ -1,2 +1,12 @@
-w:\converter\misc 
-misc\ 
+/misc/ 
+/code/OLD_win32_converter.cpp
+/code/input.gperf
+/code/tags
+/code/vc140.pdb
+/data/SC88 Pro Glockenspiel 010 000-A3-V127-CHFY.aif
+/data/desktop.ini
+/data/imhex_wav.hexproj
+/db_converter.rdbg
+/docs/ChunkNotes.txt
+/docs/AIFF_data_types.png
+/tags
