@@ -15,6 +15,11 @@ typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef uint64_t uint64;
 
+#define static global
+
+
+#define MAX_LOOP_CHUNKS 25
+
 // Hash values for chunk types. We hash the 4-byte
 //    strings used in .aif files so that we can quickly
 //    match them with a switch statement as we parse the file,
@@ -108,14 +113,16 @@ struct arena
     uint8 ArenaStart[];
 };
 
+#define ARENA_BOILERPLATE offsetof(arena, ArenaStart)
+
 struct chunk_finder
 {
     chunk HashedID;
     uint8 *Aif_Chunk;
-    uint8 *Converted_Chunk;
+    uint8 *Conv_Chunk;
 };
 
-struct converted_form_chunk
+struct conv_form_chunk
 {
     char ID[ID_WIDTH + 1];
     int32 ChunkSize;
@@ -133,7 +140,7 @@ struct aif_form_chunk
 };
 #pragma pack(pop)
 
-struct converted_common_chunk
+struct conv_common_chunk
 {
     char ID[ID_WIDTH + 1];
     int32 ChunkSize;
@@ -164,7 +171,7 @@ struct aif_marker
 };
 #pragma pack(pop)
 
-struct converted_marker
+struct conv_marker
 {
     int16 ID; // For some reason .aif uses "ID" to refer to the unique
 			//    16-bit number assigned to each Marker, even though
@@ -184,13 +191,14 @@ struct aif_marker_chunk
 };
 #pragma pack(pop)
 
-struct converted_marker_chunk
+struct conv_marker_chunk
 {
     char ID[ID_WIDTH + 1];
     int32 ChunkSize;
     uint16 TotalMarkers;
+    int NumPointlessMarkers;
     uint8 *Aif_MarkersStart;
-    converted_marker *Converted_MarkersStart;
+    conv_marker *Conv_MarkersStart;
 };
 
 
@@ -201,7 +209,7 @@ struct converted_marker_chunk
 //			     Aif_MarkerID       Position      MarkerNameLen
 #define MARKER_BOILERPLATE ( sizeof(int16) + sizeof(uint32) + sizeof(uint8) )
 
-struct converted_loop
+struct conv_loop
 {
     int16 PlayMode;
     int16 BeginLoopMarker;
@@ -217,7 +225,7 @@ struct aif_loop
 };
 #pragma pack(pop)
 
-struct converted_instrument_chunk
+struct conv_instrument_chunk
 {
     char ID[ID_WIDTH + 1];
     int32 ChunkSize;
@@ -228,8 +236,8 @@ struct converted_instrument_chunk
     int8 LowVelocity;
     int8 HighVelocity;
     int16 Gain;
-    converted_loop SustainLoop;
-    converted_loop ReleaseLoop;
+    conv_loop SustainLoop;
+    conv_loop ReleaseLoop;
 };
 
 #pragma pack(push,1)
@@ -252,17 +260,17 @@ struct aif_instrument_chunk
 struct filler_chunk
 {
     // this appears in aif files but is not documented in the aif spec.
-    // For some reason.
-    // In the file, filler bytes is plainly a 4-byte int. We assume
-    // it's a uint because: what possible need could there be for specifying a negative
-    // number of filler bytes? Although, elsehwere in the spec, plenty of examples
-    // of signed ints used for values that would never be negative.
+    //	  For some reason.
+    //	  In the file, filler bytes is plainly a 4-byte int. We assume
+    //	  it's a uint because: what possible need could there be for specifying a negative
+    //	  number of filler bytes? Although, elsehwere in the spec, plenty of examples
+    //	  of signed ints used for values that would never be negative.
     char ID[ID_WIDTH + 1];
     uint32 TotalFillerBytes;
 
 };
 
-struct converted_sound_data_chunk
+struct conv_sound_data_chunk
 {
     char ID[ID_WIDTH + 1];
     int32 ChunkSize;
@@ -349,6 +357,11 @@ struct wav_header {
  *
  */
 #define HEADER_SIZE_FOR_FILE_SIZE_CALC (offsetof(wav_header, RiffType))
+
+extern int    Global_CountOfUnimportantChunks;
+extern uint32 Global_BytesNeededForWav;
+extern int    Global_NumSampleLoops;
+extern chunk_finder *Global_UnChunkDirectory;
 
 #define CONVERTER_H
 #endif

@@ -2,6 +2,9 @@
 /* Command-line: gperf --output-file=GPerfHash.c input.gperf  */
 /* Computed positions: -k'1,4' */
 
+#include <string.h>
+
+
 #if !((' ' == 32) && ('!' == 33) && ('"' == 34) && ('#' == 35) \
       && ('%' == 37) && ('&' == 38) && ('\'' == 39) && ('(' == 40) \
       && (')' == 41) && ('*' == 42) && ('+' == 43) && (',' == 44) \
@@ -45,9 +48,11 @@ inline
 #endif
 #endif
 /*ARGSUSED*/
-static unsigned int
+unsigned int
 GPerfHasher (register const char *str, register size_t len)
 {
+  (void) len;
+
   static unsigned char asso_values[] =
     {
       31, 31, 31, 31, 31, 31, 31, 31, 31, 31,

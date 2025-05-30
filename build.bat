@@ -1,16 +1,24 @@
 @echo off
-REM — check for “-p” or “-P” and set PP_OUT accordingly
+
+REM — set preprocessor output option if requested
 set "PP_OUT="
 if /I "%~1"=="-p" (
     set "PP_OUT=-P"
 )
 
-REM — create build dir if needed, then compile
+set "COMMON_FLAGS=/W4 /WX /wd4200 -Zi -Od /nologo"
+
+REM — create build dir if needed
 if not exist build (
     mkdir build
 )
 pushd build
-cl -Zi -Od %PP_OUT% ..\code\win32_converter.cpp user32.lib
+
+REM — compile hash module as C
+cl /c /TC %COMMON_FLAGS% %PP_OUT% ..\code\GPerfHash.c
+
+cl %COMMON_FLAGS% %PP_OUT% ..\code\win32_converter.cpp GPerfHash.obj user32.lib
+
 popd
 
 REM — clean out any old WAVs
