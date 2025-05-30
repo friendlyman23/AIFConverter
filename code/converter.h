@@ -298,65 +298,78 @@ struct generic_chunk_header
     uint8 Data[];
 };
 
-		    /**********************WAV FILE SECTION**************************/
+#pragma pack(push, 1)
+struct wav_riff_chunk
+{
+    char ID[4];          // 'RIFF'
+    uint32 ChunkSize;    // Size of the entire file minus 8 bytes
+    char Format[4];      // 'WAVE'
+};
 
-/*
- * Currently, this utility only supports conversion of uncompressed PCM .aif files 
- * to uncompressed PCM .wav files. For such files, some fields in .wav file headers 
- * are constant and can be declared at compile time:
- *
- *		Field			        Type	      Size (bytes)
- *	   ---------------                  ------------      ------------
- *	   FormatTag				uint16		    2
- *	   NumChannels				uint16		    2
- *	   SampleRate				int32		    4
- *	   AvgBytesPerSec			int32		    4
- *	   BlockAlign				int16		    2
- *	   BitsPerSample                        int16               2
- *
- *	                                                     Total: 16
- */    
-#define WAV_FORMAT_CHUNK_DATA_SIZE 16
+struct wav_fmt_chunk
+{
+    char ID[4];            // 'fmt '
+    uint32 ChunkSize;      // Size of the rest of this chunk (typically 16 for PCM)
+    uint16 AudioFormat;    // PCM = 1, others for compression
+    uint16 NumChannels;    // Mono = 1, Stereo = 2, etc.
+    uint32 SampleRate;     // 44100, 48000, etc.
+    uint32 ByteRate;       // SampleRate * NumChannels * BitsPerSample / 8
+    uint16 BlockAlign;     // NumChannels * BitsPerSample / 8
+    uint16 BitsPerSample;  // 8, 16, 24, etc.
+};
 
-// For uncompressed PCM, the FormatTag field should always be 1:
-#define WAV_UNCOMPRESSED_PCM_FORMAT_TAG 1
+struct wav_data_chunk
+{
+    char ID[4];          // 'data'
+    uint32 ChunkSize;    // Number of bytes of sample data
+    uint8 Samples[];
+};
 
+struct wav_inst_chunk
+{
+    char ID[4];               // 'inst'
+    uint32 ChunkSize;         // Should be 7 bytes
+    uint8 UnshiftedNote;      // MIDI root note
+    int8 FineTune;            // -50 to +50 cents
+    int8 Gain;                // -64 to +64 dB
+    uint8 LowNote;            // Lowest note played
+    uint8 HighNote;           // Highest note played
+    uint8 LowVelocity;        // Lowest velocity played
+    uint8 HighVelocity;       // Highest velocity played
+    uint8 PadByte;
+};
 
-// Pack the bytes for the wav_header struct so we don't have to worry about struct
-//    padding when writing .wav files to disk
-#pragma pack(push,1)
-struct wav_header {
-    // Riff chunk
-    char GroupID[ID_WIDTH];       // "RIFF" 4
-    uint32 WavFileSize;				  
-    char RiffType[ID_WIDTH];        // "WAVE" 4
-				    
-    // Format chunk
-    char FormatChunkID[ID_WIDTH];   // "fmt " 4
-    uint32 FormatChunk_ChunkSize = WAV_FORMAT_CHUNK_DATA_SIZE;
-    uint16 FormatTag = WAV_UNCOMPRESSED_PCM_FORMAT_TAG;
-    uint16 NumChannels;
-    uint32 SampleRate;
-    uint32 AvgBytesPerSec;     // sampleRate × numChannels × bitsPerSample/8 (4)
-    uint16 BlockAlign;   // numChannels × bitsPerSample/8 (2)
-    uint16 BitsPerSample;  
+struct wav_sampler_chunk 
+{
+    char ID[ID_WIDTH];
+    uint32 ChunkSize;
+    uint32 Manufacturer;
+    uint32 Product;
+    uint32 SamplePeriod;
+    uint32 MidiUnityNote;
+    uint32 MidiPitchFraction;
+    uint32 SmpteFormat;
+    uint32 SmpteOffset;
+    uint32 NumSampleLoops;
+    uint32 SamplerData;
+};
 
-    // Data chunk
-    char DataChunkID[ID_WIDTH]; // "data"
-    uint32 DataChunk_ChunkSize;// numSamples × numChannels × bitsPerSample/8 (4)
+struct wav_sample_loop 
+{
+    uint32 CuePointID;
+    uint32 Type;          
+    uint32 Start;         
+    uint32 End;           
+    uint32 Fraction;
+    uint32 PlayCount;     
 };
 #pragma pack(pop)
 
-/* We can now define a size macro to help compute the wav_header's
- * "WavFileSize" field. WavFileSize should be equal to
- *	
- *	(Total size of file) - 
- *	[ (size of wav_header GroupID field) + (size of wav_header WavFileSize field) ]
- *
- * i.e., The size of the file, less the GroupID and WavFileSize fields (see above)
- *
- */
-#define HEADER_SIZE_FOR_FILE_SIZE_CALC (offsetof(wav_header, RiffType))
+#define AIF_NO_LOOP 0
+#define AIF_FWD_LOOP 1
+#define AIF_FWD_BACK_LOOP 2
+#define WAV_FWD_LOOP 0
+#define WAV_FWD_BACK_LOOP 1
 
 extern int    Global_CountOfUnimportantChunks;
 extern uint32 Global_BytesNeededForWav;

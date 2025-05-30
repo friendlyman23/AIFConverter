@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <math.h>
 #include <limits.h>
-#include <string.h>
 #include "converter.h"
 #include "converter.cpp"
 
@@ -10,12 +9,6 @@ int    Global_CountOfUnimportantChunks = 0;
 uint32 Global_BytesNeededForWav = 0;
 int    Global_NumSampleLoops = 0;
 chunk_finder *Global_UnChunkDirectory = 0;
-
-#define AIF_NO_LOOP 0
-#define AIF_FWD_LOOP 1
-#define AIF_FWD_BACK_LOOP 2
-#define WAV_FWD_LOOP 0
-#define WAV_FWD_BACK_LOOP 1
 
 extern "C"
 {
@@ -26,72 +19,89 @@ extern "C"
     GPerfIDLookup (register const char *str, register size_t len);
 }
 
-#pragma pack(push, 1)
-struct wav_riff_chunk
-{
-    char ID[4];          // 'RIFF'
-    uint32 ChunkSize;    // Size of the entire file minus 8 bytes
-    char Format[4];      // 'WAVE'
-};
+/********************************************************************************************
+ *
+ *                                  README
+ *
+ * This program converts an .aif file to a .wav file, but unlike general-purpose
+ * audio tools such as Audacity, it preserves important metadata that allow
+ * samplers to identify a file's pitch, loop points, and other such information
+ * critical for sampled audio to function as input into a digital instrument.
+ *
+ * .aif files and .wav files perform the same function, but have the following
+ * critical differences:
+ *
+ *     - .aif files store data in Big-Endian byte ordering, while .wav
+ *       files use Little-Endian byte ordering
+ *
+ *     - .aif and .wav files structure their metadata differently. Both adopt
+ *       the notion of the "chunk" -- essentially, a C struct that collects
+ *       related information -- but their chunks are not compatible in any way.
+ *
+ * Therefore, after some initialization, flow of the program follows this general
+ * pattern:
+ *
+ *     1.) Scan the .aif file and identify the addresses of its metadata chunks
+ *
+ *     2.) Validate the .aif file by confirming that its metadata conform to
+ *         the .aif standard defined by Apple
+ *
+ *     3.) Parse the .aif chunks and convert the Endianness of their numerical
+ *         data from Big Endian to Little Endian
+ *
+ *     4.) Build a new .wav file from the parsed data
+ *
+ *     5.) Write the new .wav file to disk
+ *
+ * Because this program's work is overwhelmingly concerned with parsing metadata
+ * chunks, the word "chunk" itself is used liberally to define variables
+ * and functions. Any naming convention must clearly delineate when our concern
+ * is the .aif file provided as input; vs. "converted" data waiting to be
+ * formatted for inclusion into a .wav file; vs. data properly organized for
+ * inclusion in a .wav file.
+ *
+ * The following conventions are observed:
+ *
+ *     - Variables concerning the .aif input file are prefixed with
+ *       "Aif_", e.g.:
+ *
+ *             uint8 *Aif_FileIndex = Aif_FileStart;
+ *             (represents a byte pointer into the .aif file provided as input)
+ *
+ *     - Any parsing functions are understood to be operating on .aif data,
+ *       since parsing an .aif file and outputting a corresponding .wav file
+ *       is the purpose of the program. E.g.:
+ *
+ *             ParseCommonChunk(uint8 *Aif_CommonChunk_Start,
+ *                     conv_common_chunk *Conv_CommonChunk);
+ *             (a function that parses a chunk in the .aif input file
+ *              and converts its data)
+ *
+ *     - Variables prefixed with "Conv_" refer to those containing data that have
+ *       been parsed and converted for .wav output, but whose data have not yet
+ *       been organized in the manner a .wav file expects. E.g.:
+ *
+ *             conv_common_chunk *Conv_CommonChunk =
+ *                 PushStruct(WorkingMem, conv_common_chunk);
+ *             (a declaration of a struct into which the program writes
+ *              converted data; here a function stores it in the
+ *              program's "WorkingMem" memory arena)
+ *
+ *     - Variables whose prefix is "Wav_" are those whose data are written to disk
+ *       as part of the output of the program. E.g.:
+ *
+ *             CopyIDToWav("RIFF", Wav_RiffChunk->ID);
+ *             (A function that copies the string "RIFF" into a struct;
+ *              the struct will be later written to the .wav file)
+ *
+ *     - Additionally, structure tags are always uncapitalized, while
+ *       structure variables are capitalized:
+ *
+ *             wav_sampler_chunk *Wav_SamplerChunk =
+ *                 PushStruct(WavBuffer, wav_sampler_chunk);
+ *
+ ********************************************************************************************/
 
-struct wav_fmt_chunk
-{
-    char ID[4];            // 'fmt '
-    uint32 ChunkSize;      // Size of the rest of this chunk (typically 16 for PCM)
-    uint16 AudioFormat;    // PCM = 1, others for compression
-    uint16 NumChannels;    // Mono = 1, Stereo = 2, etc.
-    uint32 SampleRate;     // 44100, 48000, etc.
-    uint32 ByteRate;       // SampleRate * NumChannels * BitsPerSample / 8
-    uint16 BlockAlign;     // NumChannels * BitsPerSample / 8
-    uint16 BitsPerSample;  // 8, 16, 24, etc.
-};
-
-struct wav_data_chunk
-{
-    char ID[4];          // 'data'
-    uint32 ChunkSize;    // Number of bytes of sample data
-    uint8 Samples[];
-};
-
-struct wav_inst_chunk
-{
-    char ID[4];               // 'inst'
-    uint32 ChunkSize;         // Should be 7 bytes
-    uint8 UnshiftedNote;      // MIDI root note
-    int8 FineTune;            // -50 to +50 cents
-    int8 Gain;                // -64 to +64 dB
-    uint8 LowNote;            // Lowest note played
-    uint8 HighNote;           // Highest note played
-    uint8 LowVelocity;        // Lowest velocity played
-    uint8 HighVelocity;       // Highest velocity played
-    uint8 PadByte;
-};
-
-struct wav_sampler_chunk 
-{
-    char ID[ID_WIDTH];
-    uint32 ChunkSize;
-    uint32 Manufacturer;
-    uint32 Product;
-    uint32 SamplePeriod;
-    uint32 MidiUnityNote;
-    uint32 MidiPitchFraction;
-    uint32 SmpteFormat;
-    uint32 SmpteOffset;
-    uint32 NumSampleLoops;
-    uint32 SamplerData;
-};
-
-struct wav_sample_loop 
-{
-    uint32 CuePointID;
-    uint32 Type;          
-    uint32 Start;         
-    uint32 End;           
-    uint32 Fraction;
-    uint32 PlayCount;     
-};
-#pragma pack(pop)
 
 int WinMain(HINSTANCE Instance, 
         HINSTANCE PrevInstance, 
@@ -139,13 +149,11 @@ int WinMain(HINSTANCE Instance,
 
     // Excepting a very few edge cases, .aif files that meet spec will 
     //	  almost always have one Common chunk and one Sound Data chunk 
-    //	  (hereafter referred to as "important chunks").
+    //	  (hereafter referred to as "IMportant chunks").
     //
     //	  So we next look for these, and as we scan the file for them, store 
     //	  pointers to other chunks we find along the way (these are 
     //	  hereafter referred to as "UNimportant chunks").
-
-    // 
     uint8 *LastByteInFile = (uint8 *)( (Aif_FileStart + Aif_FileSize_IntVersion) - 1);
 
     // We're gonna need the Common and Sound Data chunks if the .aif file meets 
@@ -338,12 +346,12 @@ int WinMain(HINSTANCE Instance,
 
     }
 
-    // Output .wav
+    // Organize the converted data into the format expected by .wav
     int WavBufferSize = ARENA_BOILERPLATE + Global_BytesNeededForWav;
     arena *WavBuffer = ArenaAlloc(WavBufferSize);
-    // We have some meta info at the start of the arena. When we write
+    // We have some meta info local at the start of the arena. When we write
     //	  the file, we need the address of the first byte after the
-    //	  meta info -- that's the address we pass into WriteFile
+    //	  meta info, so we don't accidentally write it to the .wav file
     uint8 *WavFileStarts = (uint8 *)WavBuffer->NextFreeByte;
 
     wav_riff_chunk *Wav_RiffChunk = PushStruct(WavBuffer, wav_riff_chunk);
@@ -371,6 +379,7 @@ int WinMain(HINSTANCE Instance,
     Wav_FormatChunk->BlockAlign = BlockAlign;   
     Wav_FormatChunk->BitsPerSample = BitsPerSample;
 
+    // Todo: Pull some of the loop below out into functions 
     for(int UnChunkIdx = 0; UnChunkIdx < Global_CountOfUnimportantChunks; UnChunkIdx++)
     {
 	// Loop through the unimportant chunks we found in the .aif again, 
@@ -425,23 +434,22 @@ int WinMain(HINSTANCE Instance,
 		conv_loop Conv_SustainLoop = Conv_InstrumentChunk->SustainLoop;
 		if(Conv_SustainLoop.PlayMode)
 		{
-		    wav_sample_loop *WavLoop = PushStruct(WavBuffer, wav_sample_loop);
+		    wav_sample_loop *Wav_Loop = PushStruct(WavBuffer, wav_sample_loop);
 		    ValidateIntegerRange(Conv_SustainLoop.PlayMode,
 					    AIF_FWD_LOOP, AIF_FWD_BACK_LOOP,
 					    Stringize(SustainLoop.PlayMode),
 					    __func__);
 
-		    // WavLoop type can only be one of two types:
+		    // Wav_Loop type can only be one of two types:
 		    if(Conv_SustainLoop.PlayMode == AIF_FWD_LOOP)
 		    {
-			WavLoop->Type = WAV_FWD_LOOP;
+			Wav_Loop->Type = WAV_FWD_LOOP;
 		    }
 		    else
 		    {
-			WavLoop->Type = WAV_FWD_BACK_LOOP;
+			Wav_Loop->Type = WAV_FWD_BACK_LOOP;
 		    }
 		
-
 		    // The .wav file now wants some information from the .aif 
 		    //	  Marker chunk, not the .aif Instrument chunk we've been using.
 		    //	  First, get the SampleFrame where the SustainLoop starts
@@ -449,19 +457,19 @@ int WinMain(HINSTANCE Instance,
 			Conv_InstrumentChunk->SustainLoop.BeginLoopMarker;
 		    conv_marker_chunk *Conv_MarkerChunk =
 			(conv_marker_chunk *)GetConvertedChunkPointer(MARKER_CHUNK);
-		    uint32 WavLoopStart = 
+		    uint32 Wav_LoopStart = 
 			GetSampleFramePosition(MarkerWeNeed, Conv_MarkerChunk);
-		    WavLoop->Start = (int32)WavLoopStart;
+		    Wav_Loop->Start = (int32)Wav_LoopStart;
 
 		    // Do the same, but this time, for where the SustainLoop ends
 		    MarkerWeNeed = 
 			Conv_InstrumentChunk->SustainLoop.EndLoopMarker;
-		    uint32 WavLoopEnd = 
+		    uint32 Wav_LoopEnd = 
 			GetSampleFramePosition(MarkerWeNeed, Conv_MarkerChunk);
-		    WavLoop->End = (int32)WavLoopEnd;
+		    Wav_Loop->End = (int32)Wav_LoopEnd;
 
-		    WavLoop->Fraction = 0;
-		    WavLoop->PlayCount = 0; // 0 here means loop until interrupted, 
+		    Wav_Loop->Fraction = 0;
+		    Wav_Loop->PlayCount = 0; // 0 here means loop until interrupted, 
 					    //	  not null.............btw
 		}
 		
@@ -469,39 +477,38 @@ int WinMain(HINSTANCE Instance,
 		conv_loop Conv_ReleaseLoop = Conv_InstrumentChunk->ReleaseLoop;
 		if(Conv_ReleaseLoop.PlayMode)
 		{
-		    wav_sample_loop *WavLoop = PushStruct(WavBuffer, wav_sample_loop);
+		    wav_sample_loop *Wav_Loop = PushStruct(WavBuffer, wav_sample_loop);
 		    ValidateIntegerRange(Conv_ReleaseLoop.PlayMode,
 					    AIF_FWD_LOOP, AIF_FWD_BACK_LOOP,
 					    Stringize(ReleaseLoop.PlayMode),
 					    __func__);
 
-		    // WavLoop type can only be one of two types:
+		    // Wav_Loop type can only be one of two types:
 		    if(Conv_ReleaseLoop.PlayMode == AIF_FWD_LOOP)
 		    {
-			WavLoop->Type = WAV_FWD_LOOP;
+			Wav_Loop->Type = WAV_FWD_LOOP;
 		    }
 		    else
 		    {
-			WavLoop->Type = WAV_FWD_BACK_LOOP;
+			Wav_Loop->Type = WAV_FWD_BACK_LOOP;
 		    }
 
 		    int16 MarkerWeNeed = 
 			Conv_InstrumentChunk->ReleaseLoop.BeginLoopMarker;
 		    conv_marker_chunk *Conv_MarkerChunk =
 			(conv_marker_chunk *)GetConvertedChunkPointer(MARKER_CHUNK);
-		    uint32 WavLoopStart = 
+		    uint32 Wav_LoopStart = 
 			GetSampleFramePosition(MarkerWeNeed, Conv_MarkerChunk);
-		    WavLoop->Start = (int32)WavLoopStart;
+		    Wav_Loop->Start = (int32)Wav_LoopStart;
 
-		    // Do the same, but this time, for where the ReleaseLoop ends
 		    MarkerWeNeed = 
 			Conv_InstrumentChunk->ReleaseLoop.EndLoopMarker;
-		    uint32 WavLoopEnd = 
+		    uint32 Wav_LoopEnd = 
 			GetSampleFramePosition(MarkerWeNeed, Conv_MarkerChunk);
-		    WavLoop->End = (int32)WavLoopEnd;
+		    Wav_Loop->End = (int32)Wav_LoopEnd;
 
-		    WavLoop->Fraction = 0;
-		    WavLoop->PlayCount = 0; 
+		    Wav_Loop->Fraction = 0;
+		    Wav_Loop->PlayCount = 0; 
 		}
 	    } break;
 
@@ -528,13 +535,14 @@ int WinMain(HINSTANCE Instance,
 
 	    default:
 	    {
-		// We only handle the two chunks above for now
+		// We only handle the two chunks critical for sampler playback
+		//    for now
 		continue;
 	    } break;
 	}
     }
 
-    // Finally, write the .wav Data chunk
+    // .wav Data chunk that contains the actual samples
     wav_data_chunk *Wav_DataChunk = PushStruct(WavBuffer, wav_data_chunk);
     CopyIDToWav("data", Wav_DataChunk->ID);
     int BytesToWrite = (Conv_CommonChunk->NumSampleFrames * 
@@ -585,13 +593,10 @@ int WinMain(HINSTANCE Instance,
     
     // Write WavBuffer to disk
     LPCWSTR WavFileName = L"WAVTEST.WAV";
-    HANDLE WavFileHandle = CreateFileW(WavFileName, //lpFilename
-            (FILE_GENERIC_READ | FILE_APPEND_DATA), //dwDesiredAccess
-            (FILE_SHARE_READ | FILE_SHARE_WRITE), //dwShareMode
-            0, //lpSecurityAttributes
-            CREATE_ALWAYS, //dwCreationDisposition
-            0, //dwFlagsAndAttributes
-            0); //htemplate file
+    HANDLE WavFileHandle = CreateFileW(WavFileName, 
+            (FILE_GENERIC_READ | FILE_APPEND_DATA),
+            (FILE_SHARE_READ | FILE_SHARE_WRITE), 
+            0, CREATE_ALWAYS, 0, 0); 
     if(WavFileHandle != INVALID_HANDLE_VALUE)
     {
         bool32 WriteResult = WriteFile(WavFileHandle, WavFileStarts, 
@@ -612,23 +617,3 @@ int WinMain(HINSTANCE Instance,
 
     return(0);
 }
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
