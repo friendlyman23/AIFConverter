@@ -98,10 +98,10 @@ AdvancePointer(uint8 *StartingByte, int32 BytesRead)
 }
 
 void *
-Win32_GetAifFilePointer(LPCWSTR Filename, LARGE_INTEGER *Aif_FileSize)
+Win32_GetAifFilePointer(LPCSTR Filename, LARGE_INTEGER *Aif_FileSize)
 {
     LPVOID FileAddress = 0;
-    HANDLE FileHandle = CreateFileW(Filename, GENERIC_READ, FILE_SHARE_READ, 0, 
+    HANDLE FileHandle = CreateFileA(Filename, GENERIC_READ, FILE_SHARE_READ, 0, 
             OPEN_EXISTING, 0, 0);
     if(FileHandle != INVALID_HANDLE_VALUE)
     {
@@ -131,17 +131,20 @@ Win32_GetAifFilePointer(LPCWSTR Filename, LARGE_INTEGER *Aif_FileSize)
                 else
                 {
                     OutputDebugStringA("failed to allocate memory\n");
+		    exit(1);
                 }
             }
         }
         else
         {
             OutputDebugStringA("failed to get .aif file size\n");
+	    exit(1);
         }
     }
     else
     {
         OutputDebugStringA("failed to get .aif file handle\n");
+	exit(1);
     }
 
     return(FileAddress);
