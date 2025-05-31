@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <math.h>
 #include <limits.h>
+#include <direct.h>
+#include <string.h>
 #include "converter.h"
 #include "converter.cpp"
 
@@ -103,16 +105,30 @@ extern "C"
  ********************************************************************************************/
 
 
-int WinMain(HINSTANCE Instance, 
-        HINSTANCE PrevInstance, 
-        PSTR CmdLine, 
-        int CmdShow)
+int main(int argc, char *argv[])
 {
-    (void)Instance; (void)PrevInstance; (void)CmdLine; (void)CmdShow;
+    if(argc != 2)
+    {
+	printf("\n\n  ===== How to use this program =====  \n\n"
+		"Type:\n\n"
+		"  win32_converter.exe <InputFile.aif>\n\n"
+		"where <InputFile.aif> represents the name of the .aif file\n"
+		"you wish to convert to a .wav file.\n\n"
+		"Just paste that dang filename directly after \"win32_converter.exe\",\n"
+		"but put a space in between!!\n\n"
+		"Note that if your filename contains spaces, it must be enclosed in "
+		"quotation marks.\n\n");
+	exit(1);
+    }
+    if(strlen(argv[1]) > (MAX_STRING_LEN + 1))
+    {
+	printf("\n\nThis program only accepts filenames whose lengths are 255 or fewer.\n\n");
+    }
+    // Todo: Test that the input file extension is .aif
 
     // Load .aif file
-    LPCWSTR Aif_Filename = L"AIF_SC~1.AIF";
     uint8 *Aif_FileStart;
+    char *Aif_Filename = argv[1];
 
     HANDLE HeapHandle = GetProcessHeap();
     LARGE_INTEGER Aif_FileSize;
@@ -120,7 +136,7 @@ int WinMain(HINSTANCE Instance,
 
     if(HeapHandle)
     {
-        Aif_FileStart = (uint8 *)Win32_GetAifFilePointer(Aif_Filename, &Aif_FileSize);
+        Aif_FileStart = (uint8 *)Win32_GetAifFilePointer((LPCSTR)Aif_Filename, &Aif_FileSize);
     }
     else
     {
@@ -591,29 +607,41 @@ int WinMain(HINSTANCE Instance,
 
     Assert(BytesWritten == BytesToWrite);
     
-    // Write WavBuffer to disk
-    LPCWSTR WavFileName = L"WAVTEST.WAV";
-    HANDLE WavFileHandle = CreateFileW(WavFileName, 
-            (FILE_GENERIC_READ | FILE_APPEND_DATA),
-            (FILE_SHARE_READ | FILE_SHARE_WRITE), 
-            0, CREATE_ALWAYS, 0, 0); 
+    // Now write WavBuffer to disk.
+    //	  First, change the input file's extension to .wav
+    char WavFilename[MAX_STRING_LEN + 1];
+    strncpy_s(WavFilename, Aif_Filename, (MAX_STRING_LEN + 1));
+    char *Dot = strrchr(WavFilename, '.');
+    char *FileExtension = "wav";
+    strncpy_s((Dot + 1), (MAX_STRING_LEN + 1), FileExtension, strlen(FileExtension));
+    
+    // Write the file
+    HANDLE WavFileHandle = CreateFileA(WavFilename, 
+					(FILE_GENERIC_READ | FILE_APPEND_DATA),
+					(FILE_SHARE_READ | FILE_SHARE_WRITE), 
+					0, CREATE_ALWAYS, 0, 0); 
     if(WavFileHandle != INVALID_HANDLE_VALUE)
     {
+	// Todo: Error handling
         bool32 WriteResult = WriteFile(WavFileHandle, WavFileStarts, 
 					Global_BytesNeededForWav, 
 					0, 0);
 	if(!WriteResult)
 	{
 	    OutputDebugStringA("failed to write samples\n");
-	    /*DWORD LastError = GetLastError();*/
-	    /*OutputDebugStringA("failed to write samples\n\nError: %d\n\n", LastError);*/
-	    
+	    exit(1);
 	}
     }
     else
     {
 	OutputDebugStringA("failed to create wav file\n");
+	exit(1);
     }
+
+    printf("Conversion successful. Please find the .wav file\n\n"
+	    "  %s\n\n"
+	    "in the directory named \"data\".\n\n", WavFilename);
+    
 
     return(0);
 }

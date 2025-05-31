@@ -17,7 +17,6 @@ typedef uint64_t uint64;
 
 #define static global
 
-
 #define MAX_LOOP_CHUNKS 25
 
 // Hash values for chunk types. We hash the 4-byte
