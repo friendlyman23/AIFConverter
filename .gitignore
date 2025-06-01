@@ -1,7 +1,8 @@
-# Debug symbols and PDB files
+# Debug stuff
 *.pdb
 *.ilk
 *.obj
+*.rdbg
 
 # Intermediate and compiler files
 *.i
@@ -29,5 +30,6 @@ Thumbs.db
 *~
 *.bak
 
-# Ignore tags file
+# Ignore tags files
+/tags
 /code/tags
