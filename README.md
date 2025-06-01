@@ -12,5 +12,5 @@ dump the corresponding .wav file in that same directory. Otherwise, use by placi
 the .aif file you wish to convert in the same directory as win32_converter.exe, 
 then passing the filename to the executable as an argument on the command line.
 
-Build.bat will build from source, but requires your terminal to be configured
+Build.bat will build from source, but requires your shell to be configured
 to run the MSVC compiler.
