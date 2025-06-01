@@ -1,5 +1,12 @@
 @echo off
 
+REM — check for cl.exe
+where /q cl || (
+    echo ERROR: This program must be built using the cl compiler, 
+    echo which is only accessible from the MSVC x64 Native Tools Command Prompt.
+    exit /b 1
+)
+
 set "COMMON_FLAGS=/W4 /WX /wd4200 /O2 /MT /nologo"
 
 REM — create build dir if needed
@@ -19,3 +26,4 @@ popd
 REM — cleanup
 pushd build
     del *.obj
+popd

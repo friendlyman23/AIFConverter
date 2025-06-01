@@ -1,0 +1,33 @@
+# Debug symbols and PDB files
+*.pdb
+*.ilk
+*.obj
+
+# Intermediate and compiler files
+*.i
+*.idb
+*.ipdb
+*.tlog
+*.log
+
+# Visual Studio files (if any)
+.vs/
+*.user
+*.suo
+*.vcxproj.user
+
+# System files
+*.ini
+.DS_Store
+Thumbs.db
+
+# Generated files
+*.gch
+*.pch
+
+# Backup files
+*~
+*.bak
+
+# Ignore tags file
+/code/tags
