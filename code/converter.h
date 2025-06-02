@@ -15,7 +15,7 @@ typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef uint64_t uint64;
 
-#define static global
+#define global static
 
 #define MAX_LOOP_CHUNKS 25
 

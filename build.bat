@@ -1,13 +1,12 @@
 @echo off
 
-REM — check for cl.exe
-where /q cl || (
-    echo ERROR: This program must be built using the cl compiler, 
-    echo which is only accessible from the MSVC x64 Native Tools Command Prompt.
-    exit /b 1
+REM — check for “-p” or “-P” and set PP_OUT accordingly
+set "PP_OUT="
+if /I "%~1"=="-p" (
+    set "PP_OUT=-P"
 )
 
-set "COMMON_FLAGS=/W4 /WX /wd4200 /O2 /MT /nologo"
+set "COMMON_FLAGS=/W4 /WX /wd4200 /Od /Zi /nologo"
 
 REM — create build dir if needed
 if not exist build (

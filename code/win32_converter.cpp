@@ -7,10 +7,15 @@
 #include "converter.h"
 #include "converter.cpp"
 
+typedef float real32;
+typedef double real64;
+
 int    Global_CountOfUnimportantChunks = 0;
 uint32 Global_BytesNeededForWav = 0;
 int    Global_NumSampleLoops = 0;
 chunk_finder *Global_UnChunkDirectory = 0;
+global int64 Global_PerfCountFrequency;
+
 
 extern "C"
 {
@@ -124,6 +129,14 @@ int main(int argc, char *argv[])
     {
 	printf("\n\nThis program only accepts filenames whose lengths are 255 or fewer.\n\n");
     }
+    LARGE_INTEGER PerfCountFrequencyResult;
+    QueryPerformanceFrequency(&PerfCountFrequencyResult);
+    Global_PerfCountFrequency = PerfCountFrequencyResult.QuadPart;
+
+    LARGE_INTEGER StopwatchStart; 
+    QueryPerformanceCounter(&StopwatchStart);
+    uint64 CountCyclesStart = __rdtsc();
+
     // Todo: Test that the input file extension is .aif
 
     // Load .aif file
@@ -133,6 +146,8 @@ int main(int argc, char *argv[])
     HANDLE HeapHandle = GetProcessHeap();
     LARGE_INTEGER Aif_FileSize;
     Aif_FileSize.QuadPart = 0;
+
+
 
     if(HeapHandle)
     {
@@ -641,7 +656,23 @@ int main(int argc, char *argv[])
     printf("Conversion successful. Please find the .wav file\n\n"
 	    "  %s\n\n"
 	    "in the directory named \"data\".\n\n", WavFilename);
-    
+
+     LARGE_INTEGER StopwatchEnd;
+     QueryPerformanceCounter(&StopwatchEnd);   
+     real32 LapTime = ((real32)(StopwatchEnd.QuadPart - StopwatchStart.QuadPart) /
+			(real32)Global_PerfCountFrequency);
+     LapTime = LapTime * 1000.0f;
+
+     uint64 CountCyclesEnd = __rdtsc();
+     uint64 CyclesElapsed = CountCyclesEnd - CountCyclesStart;
+     real64 MillionsOfCyclesElapsed = ((real64)CyclesElapsed / (1000.0f * 1000.0f));
+
+     char LapTimePrintBuffer[MAX_STRING_LEN];
+     sprintf_s((char *)LapTimePrintBuffer, sizeof(LapTimePrintBuffer),
+		"\n\nTotal wall clock time passed: %.02f milliseconds\n"
+		"Cycles elapsed: %.02f million\n\n", LapTime, MillionsOfCyclesElapsed);
+
+     OutputDebugStringA(LapTimePrintBuffer);
 
     return(0);
 }
