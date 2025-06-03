@@ -15,10 +15,13 @@ if not exist build (
 pushd build
 
 REM — compile hash module as C
-cl /c /TC %COMMON_FLAGS% %PP_OUT% ..\code\GPerfHash.c
+REM cl /c /TC %COMMON_FLAGS% %PP_OUT% ..\code\GPerfHash.c
 
-REM — compile and link
-cl %COMMON_FLAGS% %PP_OUT% ..\code\win32_converter.cpp GPerfHash.obj user32.lib
+REM — compile and link Aif converter
+REM - cl %COMMON_FLAGS% %PP_OUT% ..\code\win32_converter.cpp GPerfHash.obj user32.lib
+
+REM — compile and link Wav converter
+cl %COMMON_FLAGS% %PP_OUT% ..\code\win32_WavConverter.cpp user32.lib
 
 popd
 
