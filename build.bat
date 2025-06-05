@@ -6,7 +6,7 @@ if /I "%~1"=="-p" (
     set "PP_OUT=-P"
 )
 
-set "COMMON_FLAGS=/W4 /WX /wd4200 /Od /Zi /nologo"
+set "COMMON_FLAGS=/W4 /WX /wd4200 /wd4201 /Od /Zi /nologo"
 
 REM — create build dir if needed
 if not exist build (

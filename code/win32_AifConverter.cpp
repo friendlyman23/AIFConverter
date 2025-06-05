@@ -138,6 +138,7 @@ int main(int argc, char *argv[])
     uint64 CountCyclesStart = __rdtsc();
 
     // Todo: Test that the input file extension is .aif
+    // Todo: Support .aiff files
 
     // Load .aif file
     uint8 *Aif_FileStart;
