@@ -17,7 +17,7 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
-typedef enum {RIFF, FORMAT, SAMPLER, SAMPLE_LOOP, INST, DATA} Chunk;
+typedef enum {RIFF = 295, fmt = 359, smpl = 444, inst = 446, data = 410} Chunk;
 
 #define ID_WIDTH 4
 #define MAX_STRING_LEN 255 
@@ -125,6 +125,7 @@ Win32_AllocateMemory(u64 Size,  char *CallingFunction)
     }
     char DebugPrintStringBuffer[MAX_STRING_LEN];
     sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
 	    "\nERROR:\n\t"
 	    "In function"
 	    "\n\t\t%s"
@@ -151,6 +152,7 @@ ArenaPush(arena *Arena, u64 Size)
     {
 	char DebugPrintStringBuffer[MAX_STRING_LEN];
 	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
 		"\nERROR:\n\t"
 		"Push of %llu bytes to arena %s\n\t"
 		"exceeds %s's bounds\n",
@@ -195,7 +197,10 @@ ValidateInputFileString(int argc, char **argv)
 {
     if(argc != 2)
     {
-	printf("Error: Usage\n");	
+	char DebugPrintStringBuffer[MAX_STRING_LEN];
+	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+"Error: Usage\n");	
+	OutputDebugStringA((char *)DebugPrintStringBuffer);
 	exit(1);
     }
 
@@ -208,7 +213,10 @@ ValidateInputFileString(int argc, char **argv)
     {
 	if(tolower(*FileTypePtr) != *ToMatchPtr)
 	{
-	    printf("Error: File extension\n");
+	    char DebugPrintStringBuffer[MAX_STRING_LEN];
+	    sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+"Error: File extension\n");	
+	    OutputDebugStringA((char *)DebugPrintStringBuffer);
 	    exit(1);
 	}
 	FileTypePtr++;
@@ -229,7 +237,10 @@ Win32_ReadFile(wav_file_metadata *Wav_FileMetadata)
 	{
 	    if(Wav_FileMetadata->HighPart)
 	    {
-		printf("Error: .wav file is too large\n");
+		char DebugPrintStringBuffer[MAX_STRING_LEN];
+		sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+"Error: .wav file is too large\n");	
+		OutputDebugStringA((char *)DebugPrintStringBuffer);
 		exit(1);
 	    }
 	    HANDLE HeapHandle = GetProcessHeap();
@@ -243,45 +254,98 @@ Win32_ReadFile(wav_file_metadata *Wav_FileMetadata)
 					    Wav_FileMetadata->Size, &BytesRead, 0);
 		    if(!(Result && (Wav_FileMetadata->Size == BytesRead)))
 		    {
-			printf("Error: Failed to read .wav into memory\n");
+			char DebugPrintStringBuffer[MAX_STRING_LEN];
+			sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+"Error: Failed to read .wav into memory\n");	
+			OutputDebugStringA((char *)DebugPrintStringBuffer);
 			exit(1);
 		    }
 		}
 		else
 		{
-		    printf("Error: Failed to allocate memory for .wav file\n");
+		    char DebugPrintStringBuffer[MAX_STRING_LEN];
+		    sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+"Error: Failed to allocate memory for .wav file\n");	
+		    OutputDebugStringA((char *)DebugPrintStringBuffer);
 		    exit(1);
 		}
 	    }
 	    else
 	    {
-		printf("Error: Failed to get heap handle\n");
+		char DebugPrintStringBuffer[MAX_STRING_LEN];
+		sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+"Error: Failed to get heap handle\n");	
+		OutputDebugStringA((char *)DebugPrintStringBuffer);
 		exit(1);
 	    }
 	}
 	else
 	{
-	    printf("Error: Failed to get .wav file size\n");
+	    char DebugPrintStringBuffer[MAX_STRING_LEN];
+	    sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+"Error: Failed to get .wav file size\n");	
+	    OutputDebugStringA((char *)DebugPrintStringBuffer);
 	    exit(1);
 	}
     }
     else
     {
-	printf("Error: Failed to open file\n");
+	char DebugPrintStringBuffer[MAX_STRING_LEN];
+	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+"Error: Failed to open file\n");	
+	OutputDebugStringA((char *)DebugPrintStringBuffer);
 	exit(1);
     }
 }
 
+Chunk
+HashID(char *ID)
+{
+    // We only parse these five chunks for now. If the hash doesn't match one
+    //	  of the five we parse, exit
+    Chunk AllowedChunks[] = {RIFF, fmt, data, smpl, inst};
+    int Hash = 0;
+    char *Letter = ID;
+
+    for(int i = 0; i < ID_WIDTH; i++)
+    {
+	Hash += ID[i];
+    }
+    
+    for(int i = 0; i < (sizeof(AllowedChunks) / sizeof(AllowedChunks[0])); i++)
+    {
+	Chunk ThisChunk = (Chunk)Hash;
+	if(ThisChunk == AllowedChunks[i])
+	{
+	    return(ThisChunk);
+	}
+    }
+
+    char DebugPrintStringBuffer[MAX_STRING_LEN];
+    char IDBuffer[ID_WIDTH + 1];
+    for(int i = 0; i < ID_WIDTH; i++)
+    {
+	IDBuffer[i] = ID[i];
+    }
+    // stop:debug
+    IDBuffer[ID_WIDTH + 1] = '\0';
+    sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+		"Error: Failed to identify ID for chunk \"%s\"\n", (char *)IDBuffer);	
+    OutputDebugStringA((char *)DebugPrintStringBuffer);
+    exit(1);
+}
+
 struct chunk_node
 {
-    u8 *Wav_ChunkID;
-    ChunkNode *NextNode;
+    Chunk HashedID;
+    u8 *Wav_ChunkAddr; // Location of this chunk in the .wav file
+    struct chunk_node *NextChunk; // next chunk in the list
 };
-
 // END OF INCLUDES
 
 int main(int argc, char *argv[])
 {
+
     char *Wav_FileName = ValidateInputFileString(argc, argv); 
     arena *WorkingMem = ArenaAlloc(1000000);
     wav_file_metadata *Wav_FileMetadata = PushStruct(WorkingMem, wav_file_metadata);
@@ -289,7 +353,49 @@ int main(int argc, char *argv[])
     Win32_ReadFile(Wav_FileMetadata);
     u8 *Wav_Idx = Wav_FileMetadata->FileStart;
     wav_riff_chunk *Wav_RiffChunk = (wav_riff_chunk *)Wav_Idx;
-    if(strncmp(Wav_RiffChunk->
+    u8 *LastByteInFile = (Wav_FileMetadata->FileStart + (Wav_FileMetadata->Size - 1));
+
+    // If this first chunk is not the RIFF chunk, the file is busted, so exit
+    Chunk RiffID = HashID((char *)Wav_Idx);
+    if(RiffID != RIFF)
+    {
+	char DebugPrintStringBuffer[MAX_STRING_LEN];
+	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+"Error: .wav file needs a RIFF chunk as first chunk.\n");	
+	OutputDebugStringA((char *)DebugPrintStringBuffer);
+	exit(1);
+    }
+    else
+    {
+	// point wav_idx to the start of the next chunk
+	Wav_Idx += sizeof(wav_riff_chunk);
+    }
+
+    // Set up a linked list that represents the structure of the .wav file
+    chunk_node *FirstChunk = PushStruct(WorkingMem, chunk_node);
+    FirstChunk->HashedID = RiffID;
+    FirstChunk->Wav_ChunkAddr = Wav_FileMetadata->FileStart;
+
+    FirstChunk->NextChunk = PushStruct(WorkingMem, chunk_node);
+    FirstChunk->NextChunk->NextChunk = 0;
+    chunk_node *CurrentChunk = FirstChunk->NextChunk;
+
+    while(Wav_Idx <= LastByteInFile)
+    {
+	Chunk HashedID = HashID((char *)Wav_Idx);
+	CurrentChunk->HashedID = HashedID;
+	CurrentChunk->Wav_ChunkAddr = Wav_Idx;
+	CurrentChunk->NextChunk = PushStruct(WorkingMem, chunk_node);
+	CurrentChunk = CurrentChunk->NextChunk;
+
+	// Advance Wav_Idx to the next byte in the file
+	u32 ThisChunksSize = *(u32 *)(Wav_Idx + ID_WIDTH);
+	Wav_Idx += (ID_WIDTH + sizeof(u32) + ThisChunksSize);
+    }
+
+
+
+
     
 
 

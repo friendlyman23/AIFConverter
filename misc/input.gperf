@@ -1,0 +1,28 @@
+%define hash-function-name GPerfHasher
+%define lookup-function-name GPerfIDLookup
+%define word-array-name GPerfHashTable
+%compare-strncmp
+%%
+"RIFF"
+"fmt "
+"data"
+smpl
+
+
+
+
+
+
+"COMM"
+"SSND"
+"MARK"
+"INST"
+"COMT"
+"NAME"
+"AUTH"
+"(c) "
+"ANNO"
+"AESD"
+"MIDI"
+"APPL"
+"FLLR"

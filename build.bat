@@ -6,7 +6,11 @@ if /I "%~1"=="-p" (
     set "PP_OUT=-P"
 )
 
-set "COMMON_FLAGS=/W4 /WX /wd4200 /wd4201 /Od /Zi /nologo"
+REM - let's put these warnings back on when we compile for release: 
+REM - 4189(local variable is initialized but not referenced) 
+REM - 4200(struct with zero-size array member) 
+REM - 4201(nameless struct or union)
+set "COMMON_FLAGS=/W4 /WX /wd4200 /wd4201 /wd4189 /Od /Zi /nologo"
 
 REM — create build dir if needed
 if not exist build (
