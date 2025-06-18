@@ -17,7 +17,6 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
-enum chunk {RIFF = 295, fmt = 359, smpl = 444, inst = 446, data = 410};
 
 #define ID_WIDTH 4
 #define MAX_STRING_LEN 255 
@@ -35,7 +34,7 @@ struct wav_riff_chunk
 struct wav_fmt_chunk
 {
     char ID[4];            // 'fmt '
-    u32 ChunkSize;      // Size of the rest of this chunk (typically 16 for PCM)
+    u32 ChunkSize;      // Size of the rest of this chunk_hash (typically 16 for PCM)
     u16 AudioFormat;    // PCM = 1, others for compression
     u16 NumChannels;    // Mono = 1, Stereo = 2, etc.
     u32 SampleRate;     // 44100, 48000, etc.
@@ -65,21 +64,6 @@ struct wav_inst_chunk
     u8 PadByte;
 };
 
-struct wav_smpl_chunk 
-{
-    char ID[ID_WIDTH];
-    u32 ChunkSize;
-    u32 Manufacturer;
-    u32 Product;
-    u32 SamplePeriod;
-    u32 MidiUnityNote;
-    u32 MidiPitchFraction;
-    u32 SmpteFormat;
-    u32 SmpteOffset;
-    u32 NumSampleLoops;
-    u32 SamplerData;
-};
-
 struct wav_smpl_loop 
 {
     u32 CuePointID;
@@ -88,6 +72,23 @@ struct wav_smpl_loop
     u32 End;           
     u32 Fraction;
     u32 PlayCount;     
+};
+
+struct wav_smpl_chunk 
+{
+    char ID[ID_WIDTH];
+    u32 ChunkSize;
+    u32 Manufacturer;
+    u32 Product;
+    u32 SmplPeriod;
+    u32 MidiUnityNote;
+    u32 MidiPitchFraction;
+    u32 SmpteFormat;
+    u32 SmpteOffset;
+    u32 NumSmplLoops;
+    u32 SamplerData;
+    wav_smpl_loop SmplLoopsStart[]; // if there are no sample loops this 
+				    //	  just points to the next chunk
 };
 
 struct aif_form_chunk
@@ -109,34 +110,12 @@ struct aif_common_chunk
     u64 SampleRateFraction;
 };
 
-struct aif_marker
-{
-    u16 ID;
-    u32 Position;
-    u8 MarkerNameLen;
-    u8 MarkerNameStart;
-};
-
-struct aif_marker_chunk
-{
-    char ID[ID_WIDTH];
-    s32 ChunkSize;
-    u16 TotalMarkers;
-    u8 MarkersStart[];
-};
-
-struct aif_loop
-{
-    s16 PlayMode;
-    s16 BeginLoopMarker;
-    s16 EndLoopMarker;
-};
-
 struct arena
 {
     u64 ArenaSize;
     u8 *DoNotCrossThisLine;
     u8 *NextFreeByte;
+    u64 SpaceLeft;
     u8 ArenaStart[];
 };
 #pragma pack(pop)
@@ -182,8 +161,9 @@ ArenaAlloc(u64 Size)
 {
     arena *Arena = (arena *)Win32_AllocateMemory(Size, __func__);
     Arena->ArenaSize = Size;
-    Arena->DoNotCrossThisLine = ( ((u8 *)Arena + Arena->ArenaSize) - 1 );
+    Arena->DoNotCrossThisLine = ((u8 *)Arena + Size - 1);
     Arena->NextFreeByte = Arena->ArenaStart;
+    Arena->SpaceLeft = ((Arena->DoNotCrossThisLine - Arena->NextFreeByte) + 1);
     return(Arena);
 }
 
@@ -206,6 +186,7 @@ ArenaPush(arena *Arena, u64 Size)
     {
 	void *TheBytesMyLordHathRequested = (void *)Arena->NextFreeByte;
 	Arena->NextFreeByte += Size;
+	Arena->SpaceLeft = ((Arena->DoNotCrossThisLine - Arena->NextFreeByte) + 1);
 	return(TheBytesMyLordHathRequested);
     }
 }
@@ -221,7 +202,7 @@ CopyIDToAif(char *StartOfIDToRead, char *ID_Destination)
 }
 
 inline u32
-FlipEndiannessU32(u32 BytesToFlip)
+FlipEndianness32(u32 BytesToFlip)
 {
     u32 FlippedBytes = (u32)((((BytesToFlip >>  24) & 0xFF) <<  0) |
 			      (((BytesToFlip >> 16) & 0xFF) <<  8) |
@@ -236,11 +217,26 @@ FlipEndiannessU32(u32 BytesToFlip)
 // NOT INCLUDED IN CONVERTER.H
 
 #define NULLPTR (int *)0
-static arena *WorkingMem = ArenaAlloc(1000000);
+#define NULLCHAR '\0'
+arena *WorkingMem = ArenaAlloc(1000000);
 #if DEBUG
-static char **UnhashedIDArray = PushArray(WorkingMem, char *, 100);
-static int UnhashedIdArrayIdx = 0;
+char **UnhashedIDArray = PushArray(WorkingMem, char *, 100);
+int UnhashedIdArrayIdx = 0;
 #endif 
+
+enum chunk_hash
+{
+    RIFF = 295, 
+    fmt = 359, 
+    smpl = 444, 
+    inst = 446, 
+    data = 410, 
+    FORM = 308, 
+    COMM = 300, 
+    SSND = 312, 
+    MARK = 299, 
+    INST = 318
+};
 
 // differences between this and the aif_sound_data_chunk in converter.h are:
 //    struct tag (ssnd vs sound_data)
@@ -249,16 +245,23 @@ static int UnhashedIdArrayIdx = 0;
 struct aif_ssnd_chunk 
 {
     char ID[ID_WIDTH];
-    s32 ChunkSize;
+    u32 ChunkSize;
     u32 Offset;
     u32 BlockSize;
     u8 Samples[];
 };
 
+struct aif_loop
+{
+    s16 PlayMode;
+    s16 BeginLoopMarker;
+    s16 EndLoopMarker;
+};
+
 struct aif_inst_chunk
 {
     char ID[ID_WIDTH];
-    s32 ChunkSize;
+    u32 ChunkSize;
     s8 BaseNote;
     s8 Detune;
     s8 LowNote;
@@ -269,6 +272,26 @@ struct aif_inst_chunk
     aif_loop SustainLoop;
     aif_loop ReleaseLoop;
 };
+
+struct aif_marker
+{
+    u16 ID;
+    u32 Position;
+    u8 MarkerNameLen;
+    u8 PadByte;
+};
+
+// How this differs from the declaration in converter.h:
+//    MarkersStart is a flexible array member instead of
+//    an empty byte
+struct aif_marker_chunk
+{
+    char ID[ID_WIDTH];
+    u32 ChunkSize;
+    u16 TotalMarkers;
+    aif_marker MarkersStart[];
+};
+
 #pragma pack(pop)
 
 struct wav_file_metadata
@@ -287,6 +310,7 @@ struct wav_file_metadata
     };
     u8 *Index;
     HANDLE Handle;
+    u8 *LastByteInFile;
 };
 
 char *
@@ -300,8 +324,8 @@ ValidateInputFileString(int argc, char **argv)
 	exit(1);
     }
 
-    char *Wav_FileName = argv[1];
-    char *Dot = strrchr(Wav_FileName, '.');
+    char *Wav_Filename = argv[1];
+    char *Dot = strrchr(Wav_Filename, '.');
     char *FileTypePtr = Dot + 1;
     char *ToMatchPtr = "wav";
 
@@ -318,7 +342,7 @@ ValidateInputFileString(int argc, char **argv)
 	FileTypePtr++;
 	ToMatchPtr++;
     }
-    return(Wav_FileName);
+    return(Wav_Filename);
 
 }
 void
@@ -388,20 +412,20 @@ Win32_ReadFile(wav_file_metadata *Wav_FileMetadata)
     {
 	char DebugPrintStringBuffer[MAX_STRING_LEN];
 	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
-		"Error: Failed to open file\n");	
+		"Error: Failed to open .wav file\n");	
 	OutputDebugStringA((char *)DebugPrintStringBuffer);
 	exit(1);
     }
 }
 
-enum chunk
+enum chunk_hash
 HashID(char *ID)
 {
     // We only parse these five chunks for now. If the hash doesn't match one
     //	  of the five we parse, exit
-    enum chunk AllowedChunks[] = {RIFF, fmt, data, smpl, inst};
+    enum chunk_hash AllowedChunks[] = {RIFF, fmt, data, smpl, inst,
+						FORM, COMM, SSND, MARK, INST};
     int Hash = 0;
-    char *Letter = ID;
 
     for(int i = 0; i < ID_WIDTH; i++)
     {
@@ -410,7 +434,7 @@ HashID(char *ID)
     
     for(int i = 0; i < (sizeof(AllowedChunks) / sizeof(AllowedChunks[0])); i++)
     {
-	enum chunk ThisChunk = (enum chunk)Hash;
+	enum chunk_hash ThisChunk = (enum chunk_hash)Hash;
 	if(ThisChunk == AllowedChunks[i])
 	{
 	    return(ThisChunk);
@@ -423,24 +447,25 @@ HashID(char *ID)
     {
 	IDBuffer[i] = ID[i];
     }
-    IDBuffer[ID_WIDTH + 1] = '\0';
+    IDBuffer[ID_WIDTH + 1] = NULLCHAR;
     sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
-		"Error: Failed to identify ID for chunk \"%s\"\n", (char *)IDBuffer);	
+		"Error: Failed to identify ID for chunk_hash: \"%s\"\n", (char *)IDBuffer);	
     OutputDebugStringA((char *)DebugPrintStringBuffer);
     exit(1);
 }
 
 struct chunk_node
 {
-    enum chunk HashedID;
-    u8 *Wav_ChunkAddr; // Location of this chunk in the .wav file
-    struct chunk_node *NextChunk; // next chunk in the list
+    enum chunk_hash HashedID;
+    void *ChunkAddr; 
+    struct chunk_node *NextChunk;
 };
 
-static chunk_node *ChunkDirectory = (chunk_node *)NULLPTR;
+static chunk_node *Wav_ChunkDirectory = (chunk_node *)NULLPTR;
+static chunk_node *Aif_ChunkDirectory = (chunk_node *)NULLPTR;
 
 u16
-FlipEndiannessU16(u16 BytesToFlip)
+FlipEndianness16(u16 BytesToFlip)
 {
     return( (((BytesToFlip >> 0) & 0xFF) << 8)  | 
 	    (((BytesToFlip >> 8) & 0xFF) << 0) );
@@ -475,7 +500,7 @@ Write10ByteSampleRate(aif_common_chunk *Aif_CommonChunk, u32 Wav_SampleRate)
     Aif_CommonChunk->SampleRateExponent = Exponent + ExponentBias;
     
     // .aif files are Big Endian, so flip the exponent bytes
-    Aif_CommonChunk->SampleRateExponent = FlipEndiannessU16(Aif_CommonChunk->SampleRateExponent);
+    Aif_CommonChunk->SampleRateExponent = FlipEndianness16(Aif_CommonChunk->SampleRateExponent);
     
     // Now compute the fractional part of the number 
     u64 Wav_U64SampleRate = (u64)Wav_SampleRate;
@@ -497,19 +522,62 @@ Write10ByteSampleRate(aif_common_chunk *Aif_CommonChunk, u32 Wav_SampleRate)
     Aif_CommonChunk->SampleRateFraction = Wav_U64SampleRateFlippedAndShifted;
 }
 
-inline void *
-GetWavChunkPointer(enum chunk Chunk)
+void *
+Wav_GetChunkPointer(enum chunk_hash Wav_ChunkHash)
 {
-    chunk_node *CurrentChunk = ChunkDirectory;
+    chunk_node *CurrentChunk = Wav_ChunkDirectory;
 
-    while(CurrentChunk->HashedID != Chunk)
+    while((CurrentChunk->HashedID != Wav_ChunkHash) && (CurrentChunk != (chunk_node *)NULLPTR))
     {
 	CurrentChunk = CurrentChunk->NextChunk;
     }
-
-    return((void *)CurrentChunk->Wav_ChunkAddr);
+    if(CurrentChunk == (chunk_node *)NULLPTR)
+    {
+	char DebugPrintStringBuffer[MAX_STRING_LEN];
+	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+		"Error: Chunk lookup failed for HashedID %d\n", (int)Wav_ChunkHash);
+	OutputDebugStringA((char *)DebugPrintStringBuffer);
+	exit(1);
+    }
+    else
+    {
+	return(CurrentChunk->ChunkAddr);
+    }
 }
 
+void
+Aif_AddToDirectory(char *ID, void *ChunkAddr)
+{
+    chunk_node *Current = Aif_ChunkDirectory;
+    while(Current->NextChunk)
+    {
+	Current = Current->NextChunk;
+    }
+    chunk_node *NewNode = PushStruct(WorkingMem, chunk_node);
+    Current->NextChunk = NewNode; 
+    NewNode->NextChunk = (chunk_node *)NULLPTR;
+    NewNode->HashedID = HashID(ID);
+    NewNode->ChunkAddr = ChunkAddr;
+}
+
+void *
+Aif_GetChunkPointer(enum chunk_hash Aif_ChunkHash) 
+{
+    chunk_node *CurrentChunk = Aif_ChunkDirectory;
+    while((CurrentChunk->HashedID != Aif_ChunkHash) && (CurrentChunk->NextChunk != (chunk_node *)NULLPTR))
+    {
+	CurrentChunk = CurrentChunk->NextChunk;
+    }
+    if(CurrentChunk == (chunk_node *)NULLPTR)
+    {
+	char DebugPrintStringBuffer[MAX_STRING_LEN];
+	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+		"Error: Chunk lookup failed for HashedID %d\n", (int)Aif_ChunkHash);
+	OutputDebugStringA((char *)DebugPrintStringBuffer);
+	exit(1);
+    }
+    return((void *)CurrentChunk->ChunkAddr);
+}
 /**/
 /*void*/
 /*Debug_PushNullTerminatedID(char *ID)*/
@@ -519,47 +587,49 @@ GetWavChunkPointer(enum chunk Chunk)
 /*    {*/
 /*	IDBuffer[i] = ID[i];*/
 /*    }*/
-/*    IDBuffer[ID_WIDTH + 1] = '\0';*/
+/*    IDBuffer[ID_WIDTH + 1] = NULLCHAR;*/
 /*    UnhashedIDArray[UnhashedIdArrayIdx++] = IDBuffer;*/
 /*}*/
-// END OF INCLUDES
 
+#define Assert(expression) if(!(expression)) {*(int *)0 = 0;}
+// END OF INCLUDES
 
 int main(int argc, char *argv[])
 {
-    char *Wav_FileName = ValidateInputFileString(argc, argv); 
+    // TODO: Check that input filepath isn't longer than 255 or some other reasonable limit
+    char *Wav_Filename = ValidateInputFileString(argc, argv); 
     wav_file_metadata *Wav_FileMetadata = PushStruct(WorkingMem, wav_file_metadata);
-    Wav_FileMetadata->PathName = Wav_FileName;
+    Wav_FileMetadata->PathName = Wav_Filename;
     Win32_ReadFile(Wav_FileMetadata);
     u8 *Wav_Idx = Wav_FileMetadata->FileStart;
     wav_riff_chunk *Wav_RiffChunk = (wav_riff_chunk *)Wav_Idx;
-    u8 *LastByteInFile = (Wav_FileMetadata->FileStart + (Wav_FileMetadata->Size - 1));
+    Wav_FileMetadata->LastByteInFile = ((u8 *)Wav_FileMetadata->FileStart + Wav_FileMetadata->Size - 1);
 
-    // If this first chunk is not the RIFF chunk, the file is busted, so exit
-    enum chunk RiffID = HashID((char *)Wav_Idx);
+    // If this first chunk_hash is not the RIFF chunk_hash, the file is busted, so exit
+    enum chunk_hash RiffID = HashID((char *)Wav_Idx);
     if(RiffID != RIFF)
     {
 	char DebugPrintStringBuffer[MAX_STRING_LEN];
 	sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
-		"Error: .wav file needs a RIFF chunk as first chunk.\n");	
+		"Error: .wav file needs a RIFF chunk_hash as first chunk_hash.\n");	
 	OutputDebugStringA((char *)DebugPrintStringBuffer);
 	exit(1);
     }
     else
     {
-	// point wav_idx to the start of the next chunk
+	// point wav_idx to the start of the next chunk_hash
 	Wav_Idx += sizeof(wav_riff_chunk);
     }
 
     // Set up a linked list that represents the structure of the .wav file
-    ChunkDirectory = PushStruct(WorkingMem, chunk_node);
-    ChunkDirectory->HashedID = RiffID;
-    ChunkDirectory->Wav_ChunkAddr = Wav_FileMetadata->FileStart;
-    ChunkDirectory->NextChunk = (chunk_node *)NULLPTR;
+    Wav_ChunkDirectory = PushStruct(WorkingMem, chunk_node);
+    Wav_ChunkDirectory->HashedID = RiffID;
+    Wav_ChunkDirectory->ChunkAddr = (void *)Wav_FileMetadata->FileStart;
+    Wav_ChunkDirectory->NextChunk = (chunk_node *)NULLPTR;
 
-    while(Wav_Idx < LastByteInFile)
+    while(Wav_Idx < Wav_FileMetadata->LastByteInFile)
     {
-	chunk_node *CurrentChunk = ChunkDirectory;
+	chunk_node *CurrentChunk = Wav_ChunkDirectory;
 	while(CurrentChunk->NextChunk)
 	{
 	    CurrentChunk = CurrentChunk->NextChunk;
@@ -569,9 +639,9 @@ int main(int argc, char *argv[])
 	CurrentChunk = CurrentChunk->NextChunk;
 	CurrentChunk->NextChunk = (chunk_node *)NULLPTR;
 
-	enum chunk HashedID = HashID((char *)Wav_Idx);
+	enum chunk_hash HashedID = HashID((char *)Wav_Idx);
 	CurrentChunk->HashedID = HashedID;
-	CurrentChunk->Wav_ChunkAddr = Wav_Idx;
+	CurrentChunk->ChunkAddr = (void *)Wav_Idx;
 
 	// Advance Wav_Idx to the next byte in the file
 	u32 ThisChunksSize = *(u32 *)(Wav_Idx + ID_WIDTH);
@@ -583,12 +653,12 @@ int main(int argc, char *argv[])
 
     // Get number of bytes for .aif file
     
-    u32 BytesNeededForAif = 0;
+    DWORD BytesNeededForAif = 0;
     BytesNeededForAif += sizeof(aif_form_chunk);
     BytesNeededForAif += sizeof(aif_common_chunk);
     BytesNeededForAif += sizeof(aif_ssnd_chunk);
 
-    for(chunk_node *ThisChunk = ChunkDirectory; 
+    for(chunk_node *ThisChunk = Wav_ChunkDirectory; 
 	    ThisChunk != (chunk_node *)NULLPTR; 
 	    ThisChunk = ThisChunk->NextChunk)
     {
@@ -596,11 +666,11 @@ int main(int argc, char *argv[])
 	{
 	    case smpl:
 	    {
-		wav_smpl_chunk *Wav_SmplChunk = (wav_smpl_chunk *)ThisChunk->Wav_ChunkAddr;
-		if(Wav_SmplChunk->NumSampleLoops)
+		wav_smpl_chunk *Wav_SmplChunk = (wav_smpl_chunk *)ThisChunk->ChunkAddr;
+		if(Wav_SmplChunk->NumSmplLoops)
 		{
 		    BytesNeededForAif += sizeof(aif_marker_chunk);
-		    BytesNeededForAif += (sizeof(aif_marker) * Wav_SmplChunk->NumSampleLoops);
+		    BytesNeededForAif += ((sizeof(aif_marker) * Wav_SmplChunk->NumSmplLoops) * 2);
 		} 
 	    } break;
     
@@ -611,7 +681,7 @@ int main(int argc, char *argv[])
 
 	    case data:
 	    {
-		wav_data_chunk *Wav_DataChunk = (wav_data_chunk *)ThisChunk->Wav_ChunkAddr;
+		wav_data_chunk *Wav_DataChunk = (wav_data_chunk *)ThisChunk->ChunkAddr;
 		BytesNeededForAif += Wav_DataChunk->ChunkSize;
 	    } break;
 
@@ -625,7 +695,7 @@ int main(int argc, char *argv[])
 	    {
 		char DebugPrintStringBuffer[MAX_STRING_LEN];
 		sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
-			"Error: Encountered unexepected chunk when calculating"
+			"Error: Encountered unexepected chunk_hash when calculating"
 			"bytes needed for .aif file\n");	
 		OutputDebugStringA((char *)DebugPrintStringBuffer);
 		exit(1);
@@ -634,56 +704,210 @@ int main(int argc, char *argv[])
     }
 
     // Allocate bytes for the converted .aif file
-    
-    arena *Aif_Arena = ArenaAlloc(BytesNeededForAif + offsetof(arena, ArenaStart));
+    arena *Aif_Buffer = ArenaAlloc(BytesNeededForAif + offsetof(arena, ArenaStart));
 
-    // FORM Chunk
-    aif_form_chunk *Aif_FormChunk = PushStruct(Aif_Arena, aif_form_chunk);
+    // Declare a linked list to keep track of the structure of the .aif file
+    Aif_ChunkDirectory = PushStruct(WorkingMem, chunk_node);
+    Aif_ChunkDirectory->HashedID = HashID((char *)"FORM");
+    Aif_ChunkDirectory->ChunkAddr = (void *)Aif_Buffer;
+    Aif_ChunkDirectory->NextChunk = (chunk_node *)NULLPTR;
+
+    // .aif FORM Chunk
+    aif_form_chunk *Aif_FormChunk = PushStruct(Aif_Buffer, aif_form_chunk);
+    Aif_AddToDirectory("FORM", Aif_FormChunk);
     CopyIDToAif("FORM", Aif_FormChunk->ID);
     u32 Aif_FormChunkSizeLittleEndian = (BytesNeededForAif - offsetof(aif_form_chunk, FormType));
-    Aif_FormChunk->ChunkSize = FlipEndiannessU32(Aif_FormChunkSizeLittleEndian);
+    Aif_FormChunk->ChunkSize = FlipEndianness32(Aif_FormChunkSizeLittleEndian);
     CopyIDToAif("AIFF", Aif_FormChunk->FormType);
 
-    // COMM Chunk
-    aif_common_chunk *Aif_CommonChunk = PushStruct(Aif_Arena, aif_common_chunk);
+    // .aif COMM Chunk 
+    aif_common_chunk *Aif_CommonChunk = PushStruct(Aif_Buffer, aif_common_chunk);
+    Aif_AddToDirectory("COMM", Aif_FormChunk);
     CopyIDToAif("COMM", Aif_CommonChunk->ID);
-    wav_fmt_chunk *Wav_FormatChunk = (wav_fmt_chunk *)GetWavChunkPointer(fmt);
-    Aif_CommonChunk->ChunkSize = FlipEndiannessU32((u32)18); // always 18
-    Aif_CommonChunk->NumChannels = FlipEndiannessU16((u16)Wav_FormatChunk->NumChannels); 
-
-    wav_fmt_chunk *Wav_DataChunk = (wav_fmt_chunk *)GetWavChunkPointer(data);
+    wav_fmt_chunk *Wav_FormatChunk = (wav_fmt_chunk *)Wav_GetChunkPointer(fmt);
+    Aif_CommonChunk->ChunkSize = FlipEndianness32((u32)18); // always 18
+    Aif_CommonChunk->NumChannels = FlipEndianness16((u16)Wav_FormatChunk->NumChannels); 
+    wav_data_chunk *Wav_DataChunk = (wav_data_chunk *)Wav_GetChunkPointer(data);
     u32 Wav_NumSampleFramesLittleEndian = (u32)(Wav_DataChunk->ChunkSize / Wav_FormatChunk->BlockAlign);
-    Aif_CommonChunk->NumSampleFrames = FlipEndiannessU32(Wav_NumSampleFramesLittleEndian);
-    Aif_CommonChunk->SampleSize = FlipEndiannessU16(Wav_FormatChunk->BitsPerSample);
+    Aif_CommonChunk->NumSampleFrames = FlipEndianness32(Wav_NumSampleFramesLittleEndian);
+    Aif_CommonChunk->SampleSize = FlipEndianness16(Wav_FormatChunk->BitsPerSample);
     Write10ByteSampleRate(Aif_CommonChunk, Wav_FormatChunk->SampleRate);
 
+    // MARK 
+    // TODO: Lots of ways to make this more robust:
+    //	  - Look for Cue chunk_hash and see if the .wav file encodes names for its
+    //	      SmplLoops. For now, we don't look for these and just write the .aif
+    //	      MarkerNames as empty strings
+    //
+    //	  - Have logic that tries to determine what type of loop (sustain or release)
+    //	      is represented by any .wav SmplLoop fields we find. For now, we assume the 
+    //	      first SmplLoop structure refers to a sustain loop, any second loop refers
+    //	      to a release loop, and if we find more than that, we abort
+    //
+    //	  - Test that we're reading the data we expect when we read the SmplLoop
+    //	      fields: since the first field of each SmplLoop is supposed
+    //	      to be a unique 32-bit int to distinguish it from other loops,
+    //	      confirm we don't read any repeats; confirm that when we cast the
+    //	      ID of the SmplLoop in the .wav file from a 32-bit int to its equivalent
+    //	      field in the .aif file, a 16-bit int, we don't lose data, etc.
+    //
+    wav_smpl_chunk *Wav_SmplChunk = (wav_smpl_chunk *)Wav_GetChunkPointer(smpl);
+    if(Wav_SmplChunk->NumSmplLoops)
+    {
+	if(Wav_SmplChunk->NumSmplLoops > 2)
+	{
+	    char DebugPrintStringBuffer[MAX_STRING_LEN];
+	    sprintf_s(DebugPrintStringBuffer, sizeof(DebugPrintStringBuffer), 
+		    "Error: found more than 2 SmplLoops in .wav file.\n"
+		    "This program only supports files containing 0, 1 or 2 SmplLoops.\n"
+		    "This program will now exit.\n");	
+	    OutputDebugStringA((char *)DebugPrintStringBuffer);
+	    exit(1);
+	}
 
+	// Push the Marker chunk to the .aif buffer and fill in some values known
+	//    at compile time
+	aif_marker_chunk *Aif_MarkerChunk = PushStruct(Aif_Buffer, aif_marker_chunk);
+	Aif_AddToDirectory("MARK", Aif_MarkerChunk);
+	CopyIDToAif("MARK", Aif_MarkerChunk->ID);
+	u32 Aif_MarkerChunkSize = (sizeof(aif_marker_chunk) + 
+				    (u32)(sizeof(aif_marker) * Wav_SmplChunk->NumSmplLoops));
+	Aif_MarkerChunk->ChunkSize = FlipEndianness32(Aif_MarkerChunkSize);
+	Aif_MarkerChunk->TotalMarkers = FlipEndianness16((u16)Wav_SmplChunk->NumSmplLoops * 2);
 
+	// Write data encoding looping parameters found in the .wav file to the
+	//    .aif buffer
+	u16 Aif_MarkerIDCounter = 1;
+	for(u16 i = 0; i < Wav_SmplChunk->NumSmplLoops; i++)
+	{
+	    wav_smpl_loop Wav_ThisLoop = Wav_SmplChunk->SmplLoopsStart[i];
+	    aif_marker *Aif_TwoMarkers = PushArray(Aif_Buffer, aif_marker, 2);
 
+	    Aif_TwoMarkers[0].ID = FlipEndianness16(Aif_MarkerIDCounter);
+	    Aif_MarkerIDCounter++;
+	    Aif_TwoMarkers[0].Position = FlipEndianness32(Wav_ThisLoop.Start);
+	    Aif_TwoMarkers[0].MarkerNameLen = 0;
+	    Aif_TwoMarkers[0].PadByte = 0;
 
+	    Aif_TwoMarkers[1].ID = FlipEndianness16(Aif_MarkerIDCounter);
+	    Aif_MarkerIDCounter++;
+	    Aif_TwoMarkers[1].Position = FlipEndianness32(Wav_ThisLoop.End);
+	    Aif_TwoMarkers[1].MarkerNameLen = 0;
+	    Aif_TwoMarkers[1].PadByte = 0;
+	}
+    }
 
+    // INST Chunk
+    //	  Todo: check for invalid wav loop types (there are only two valid types)
+    //	  Todo: unify approach to getting wav chunks. here we cache, above we
+    //	      access via pointer
+    //
+    aif_inst_chunk *Aif_InstChunk = PushStruct(Aif_Buffer, aif_inst_chunk);
+    Aif_AddToDirectory("INST", Aif_InstChunk);
+    CopyIDToAif("INST", Aif_InstChunk->ID);
+    wav_inst_chunk Wav_InstChunk = *(wav_inst_chunk *)Wav_GetChunkPointer(inst);
 
+    Aif_InstChunk->ChunkSize = (sizeof(aif_inst_chunk) - offsetof(aif_inst_chunk, BaseNote));
+    Aif_InstChunk->BaseNote = Wav_InstChunk.UnshiftedNote;
+    Aif_InstChunk->Detune = Wav_InstChunk.FineTune;
+    Aif_InstChunk->LowNote = Wav_InstChunk.LowNote;
+    Aif_InstChunk->HighNote = Wav_InstChunk.HighNote;
+    Aif_InstChunk->LowVelocity = Wav_InstChunk.LowVelocity;
+    Aif_InstChunk->HighVelocity = Wav_InstChunk.HighVelocity;
 
+    Aif_InstChunk->Gain = FlipEndianness16((s16)Wav_InstChunk.Gain);
+    enum aif_loop_type {AIF_NO_LOOP = 0, AIF_FWD_LOOP = 1, AIF_FWD_BACK_LOOP = 2};
+    enum wav_loop_type {WAV_FWD_LOOP = 0, WAV_FWD_BACK_LOOP = 1};
+    if(Wav_SmplChunk->NumSmplLoops)
+    {
+	// if we're here then there's at least a SustainLoop
+	u16 Aif_MarkerIDCounter = 1;
+	wav_smpl_loop Wav_ThisLoop = Wav_SmplChunk->SmplLoopsStart[0];
+	if(Wav_ThisLoop.Type == WAV_FWD_LOOP)
+	{
+	    Aif_InstChunk->SustainLoop.PlayMode = FlipEndianness16((u16)AIF_FWD_LOOP);
+	}
+	else
+	{
+	    Aif_InstChunk->SustainLoop.PlayMode = FlipEndianness16((u16)AIF_FWD_BACK_LOOP);
+	}
+	Aif_InstChunk->SustainLoop.BeginLoopMarker = FlipEndianness16(Aif_MarkerIDCounter);
+	Aif_MarkerIDCounter++;
+	Aif_InstChunk->SustainLoop.EndLoopMarker = FlipEndianness16(Aif_MarkerIDCounter);
+	Aif_MarkerIDCounter++;
+	
+	// if there's more than one SmplLoop in the .wav file
+	if(Wav_SmplChunk->NumSmplLoops > 1)
+	{
+	    Wav_ThisLoop = Wav_SmplChunk->SmplLoopsStart[1];
+	    if(Wav_ThisLoop.Type == WAV_FWD_LOOP)
+	    {
+		Aif_InstChunk->SustainLoop.PlayMode = AIF_FWD_LOOP;
+	    }
+	    else
+	    {
+		Aif_InstChunk->SustainLoop.PlayMode = AIF_FWD_BACK_LOOP;
+	    }
+	    Aif_InstChunk->ReleaseLoop.BeginLoopMarker = FlipEndianness16(Aif_MarkerIDCounter);
+	    Aif_MarkerIDCounter++;
+	    Aif_InstChunk->ReleaseLoop.EndLoopMarker = FlipEndianness16(Aif_MarkerIDCounter);
+	}
+    }
 
-
-
-
-
-
-
-
-
-
-
+    // SSND chunk
+    aif_ssnd_chunk *Aif_SSNDChunk = PushStruct(Aif_Buffer, aif_ssnd_chunk);
     
+    int SamplesToCopy = Wav_DataChunk->ChunkSize;
+    Assert(Aif_Buffer->SpaceLeft == Wav_DataChunk->ChunkSize);
+    for(int Idx = 0; Idx < SamplesToCopy; Idx += 3)
+    {
+	Aif_SSNDChunk->Samples[Idx + 2] = Wav_DataChunk->Samples[Idx];
+    }
+    for(int Idx = 1; Idx < SamplesToCopy; Idx += 3)
+    {
+	Aif_SSNDChunk->Samples[Idx] = Wav_DataChunk->Samples[Idx];
+    }
+    for(int Idx = 2; Idx < SamplesToCopy; Idx += 3)
+    {
+	Aif_SSNDChunk->Samples[Idx] = Wav_DataChunk->Samples[Idx + 2];
+    }
 
-
-
-
-
-
-
-
+    // Write the .aif to disk
+    // Get the length of the Aif filename
+    char *Temp = Wav_Filename;
+    int FilenameLen = 0;
+    while(*Temp)
+    {
+	FilenameLen += 1;
+	Temp++;
+    }
+    char *Aif_Filename = PushArray(WorkingMem, char, FilenameLen + 1);
+    int Aif_FilenameIdx = 0;
+    Temp = Wav_Filename;
+    while(*Temp != '.')
+    {
+	Aif_Filename[Aif_FilenameIdx] = *Temp;
+	Aif_FilenameIdx++;
+	Temp++;
+    }
+    Aif_Filename[Aif_FilenameIdx++] = '.';
+    Aif_Filename[Aif_FilenameIdx++] = 'a';
+    Aif_Filename[Aif_FilenameIdx++] = 'i';
+    Aif_Filename[Aif_FilenameIdx++] = 'f';
+    Aif_Filename[Aif_FilenameIdx] = NULLCHAR;
+	/*   HANDLE Aif_FileHandle = CreateFileA((LPCSTR)Aif_Filename, GENERIC_WRITE, 0, 0, */
+	/*				CREATE_NEW, FILE_ATTRIBUTE_NORMAL, 0);*/
+	/*   if(Aif_FileHandle != INVALID_HANDLE_VALUE)*/
+	/*   {*/
+	/*DWORD BytesWritten = 0;*/
+	/*// stop: the written file is corrupted*/
+	/*BOOL Aif_WriteResult = WriteFile(Aif_FileHandle, Aif_Buffer->ArenaStart, */
+	/*				    BytesNeededForAif, &BytesWritten, 0);*/
+	/*Assert(Aif_WriteResult && (BytesNeededForAif == BytesWritten));*/
+	/*   }*/
+	/**/
+	/*   //	  */
+	/**/
 
 
     return(0);
